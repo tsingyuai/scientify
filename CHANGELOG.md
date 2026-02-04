@@ -1,3 +1,9 @@
+## [1.1.1](https://github.com/tsingyuai/scientific/compare/v1.1.0...v1.1.1) (2026-02-04)
+
+### Documentation
+
+* add quick start section to README ([8246371](https://github.com/tsingyuai/scientific/commit/82463717e2a214733bf1a701f7886adcedb930df))
+
 ## [1.1.0](https://github.com/tsingyuai/scientific/compare/v1.0.1...v1.1.0) (2026-02-04)
 
 ### Features
