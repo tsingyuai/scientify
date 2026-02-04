@@ -37,6 +37,18 @@
 
 ---
 
+## Quick Start
+
+```bash
+# Install
+npm install scientify
+
+# Add to your OpenClaw config, then:
+openclaw "Research transformer efficiency and generate ideas"
+```
+
+---
+
 ## Installation
 
 ```bash

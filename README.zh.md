@@ -37,6 +37,18 @@
 
 ---
 
+## 快速开始
+
+```bash
+# 安装
+npm install scientify
+
+# 添加到 OpenClaw 配置后：
+openclaw "研究 transformer 效率并生成研究想法"
+```
+
+---
+
 ## 安装
 
 ```bash
