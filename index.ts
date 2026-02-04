@@ -8,10 +8,12 @@ import {
   handleProjectDelete,
 } from "./src/commands.js";
 import { createArxivTool } from "./src/tools/arxiv-tool.js";
+import { createGithubSearchTool } from "./src/tools/github-search-tool.js";
 
 export default function register(api: OpenClawPluginApi) {
-  // Register the arxiv tool
+  // Register tools
   api.registerTool(createArxivTool());
+  api.registerTool(createGithubSearchTool());
 
   // Register chat commands (bypass LLM)
   api.registerCommand({

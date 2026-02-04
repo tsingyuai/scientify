@@ -193,7 +193,7 @@ Execute:
 cd $WORKSPACE/project && pip install -r requirements.txt && python run.py --epochs 2
 ```
 
-If using GPU containers, ensure sandbox has `gpus` and `shmSize` configured.
+**Note:** GPU support requires external configuration. For GPU-accelerated training, consider using a dedicated ML environment or cloud instance.
 
 **Output:** `$WORKSPACE/project/` (code) + `$WORKSPACE/ml_res.md` (implementation report)
 
