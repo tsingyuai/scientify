@@ -1,0 +1,51 @@
+{
+  "name": "scientify",
+  "version": "1.0.0",
+  "description": "Scientify - AI-powered research workflow automation for OpenClaw. Includes idea generation, literature review, research pipeline skills, and arxiv tool.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "skills"
+  ],
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "research",
+    "arxiv",
+    "academic",
+    "literature-review",
+    "idea-generation"
+  ],
+  "author": "tsingyuai",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tsingyuai/scientific.git"
+  },
+  "homepage": "https://github.com/tsingyuai/scientific#readme",
+  "bugs": {
+    "url": "https://github.com/tsingyuai/scientific/issues"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "devDependencies": {
+    "openclaw": "workspace:*",
+    "@sinclair/typebox": "^0.32.0",
+    "tar": "^7.0.0",
+    "typescript": "^5.3.0",
+    "@types/node": "^20.0.0"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2024.0.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "scientify",
+  "name": "Scientify",
+  "description": "AI-powered research workflow automation. Includes idea generation from literature, research pipeline, literature review skills, and arxiv search tool.",
+  "skills": ["./skills"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "workspaceRoot": {
+        "type": "string",
+        "description": "Custom workspace root directory (default: ~/.openclaw/workspace/projects)"
+      },
+      "defaultMaxPapers": {
+        "type": "number",
+        "description": "Default max papers to download per search (default: 10)"
+      }
+    }
+  }
+}
