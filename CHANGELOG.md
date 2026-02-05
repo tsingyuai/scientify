@@ -1,3 +1,13 @@
+## [1.2.0](https://github.com/tsingyuai/scientific/compare/v1.1.5...v1.2.0) (2026-02-05)
+
+### Features
+
+* add literature-survey skill and refactor literature-review ([ad86327](https://github.com/tsingyuai/scientific/commit/ad86327f5000e8cb8b57ea73f24444238b3ac949))
+
+### Refactoring
+
+* **skills:** rename literature-review to write-review-paper, remove arxiv ([176e0b0](https://github.com/tsingyuai/scientific/commit/176e0b041a5f9131153b290e46580976cdb149a7))
+
 ## [1.1.5](https://github.com/tsingyuai/scientific/compare/v1.1.4...v1.1.5) (2026-02-05)
 
 ### Bug Fixes
