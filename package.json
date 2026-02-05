@@ -33,8 +33,11 @@
     "build": "tsc",
     "clean": "rm -rf dist",
     "dev": "tsc --watch",
+    "dev:link": "npm run build && rm -rf ~/.openclaw/extensions/scientify && ln -sfn \"$(pwd)\" ~/.openclaw/extensions/scientify",
+    "dev:unlink": "rm -f ~/.openclaw/extensions/scientify",
     "dev:reload": "nodemon --watch src --watch skills --ext ts,md,json --exec \"npm run build && pkill -USR1 -f 'openclaw.mjs gateway' || true\" --delay 500ms",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build",
+    "release": "npm version patch && git push && git push --tags"
   },
   "devDependencies": {
     "@sinclair/typebox": "^0.32.0",

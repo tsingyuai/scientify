@@ -1,4 +1,5 @@
 import { Type } from "@sinclair/typebox";
+import { Result } from "./result.js";
 
 const GITHUB_SEARCH_API = "https://api.github.com/search/repositories";
 const DEFAULT_MAX_RESULTS = 10;
@@ -113,34 +114,15 @@ export function createGithubSearchTool() {
       try {
         response = await fetch(url, { headers });
       } catch (error) {
-        return {
-          type: "tool_result" as const,
-          content: JSON.stringify({
-            error: "network_error",
-            message: `Failed to reach GitHub API: ${error instanceof Error ? error.message : String(error)}`,
-          }),
-        };
+        return Result.err("network_error", `Failed to reach GitHub API: ${error instanceof Error ? error.message : String(error)}`);
       }
 
       if (response.status === 403) {
-        return {
-          type: "tool_result" as const,
-          content: JSON.stringify({
-            error: "rate_limited",
-            message:
-              "GitHub API rate limit exceeded. Set GITHUB_TOKEN environment variable for higher limits.",
-          }),
-        };
+        return Result.err("rate_limited", "GitHub API rate limit exceeded. Set GITHUB_TOKEN environment variable for higher limits.");
       }
 
       if (!response.ok) {
-        return {
-          type: "tool_result" as const,
-          content: JSON.stringify({
-            error: "api_error",
-            message: `GitHub API returned ${response.status}: ${response.statusText}`,
-          }),
-        };
+        return Result.err("api_error", `GitHub API returned ${response.status}: ${response.statusText}`);
       }
 
       const data = (await response.json()) as { items?: GithubRepo[]; total_count?: number };
@@ -154,15 +136,12 @@ export function createGithubSearchTool() {
         topics: repo.topics ?? [],
       }));
 
-      return {
-        type: "tool_result" as const,
-        content: JSON.stringify({
-          query,
-          total_count: data.total_count ?? 0,
-          returned: repos.length,
-          repos,
-        }),
-      };
+      return Result.ok({
+        query,
+        total_count: data.total_count ?? 0,
+        returned: repos.length,
+        repos,
+      });
     },
   };
 }

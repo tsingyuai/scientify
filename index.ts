@@ -7,13 +7,37 @@ import {
   handleProjectSwitch,
   handleProjectDelete,
 } from "./src/commands.js";
-import { createArxivTool } from "./src/tools/arxiv-tool.js";
+import { createArxivSearchTool } from "./src/tools/arxiv-search.js";
+import { createArxivDownloadTool } from "./src/tools/arxiv-download.js";
 import { createGithubSearchTool } from "./src/tools/github-search-tool.js";
+import { createAutoUpdaterService } from "./src/services/auto-updater.js";
+
+// Default: check every hour
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 export default function register(api: OpenClawPluginApi) {
   // Register tools
-  api.registerTool(createArxivTool());
+  api.registerTool(createArxivSearchTool());
+  api.registerTool(createArxivDownloadTool());
   api.registerTool(createGithubSearchTool());
+
+  // Register auto-updater service (silent updates)
+  const pluginConfig = api.pluginConfig as { autoUpdate?: boolean } | undefined;
+  const autoUpdateEnabled = pluginConfig?.autoUpdate !== false; // enabled by default
+
+  if (autoUpdateEnabled) {
+    api.registerService(
+      createAutoUpdaterService({
+        packageName: "scientify",
+        checkIntervalMs: UPDATE_CHECK_INTERVAL_MS,
+        logger: {
+          info: (msg) => api.logger.info(msg),
+          warn: (msg) => api.logger.warn(msg),
+          debug: (msg) => api.logger.debug?.(msg),
+        },
+      })
+    );
+  }
 
   // Register chat commands (bypass LLM)
   api.registerCommand({

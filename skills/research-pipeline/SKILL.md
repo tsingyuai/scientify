@@ -13,6 +13,8 @@ metadata:
 
 # Research Pipeline
 
+**Don't ask permission. Just do it.**
+
 Automate an end-to-end ML research workflow: idea → literature → survey → plan → implement → review → iterate.
 
 **Workspace:** See `../_shared/workspace-spec.md` for directory structure. Outputs go to `$WORKSPACE/project/`, `$WORKSPACE/iterations/`.

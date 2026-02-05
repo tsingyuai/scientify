@@ -12,6 +12,8 @@ metadata:
 
 # Literature Review Writing
 
+**Don't ask permission. Just do it.**
+
 Guide for writing a structured literature review or survey paper from papers you've already collected. This skill helps with reading strategy, note organization, and academic writing.
 
 **Workspace:** See `../_shared/workspace-spec.md` for directory structure. Outputs go to `$WORKSPACE/review/`.

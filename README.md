@@ -14,8 +14,7 @@
 |-------|-------------|
 | **idea-generation** | Generate innovative research ideas from a topic. Searches arXiv/GitHub, downloads papers, analyzes literature, outputs 5 ideas with citations. |
 | **research-pipeline** | End-to-end ML research workflow: idea → literature → survey → plan → implement → review → iterate. |
-| **literature-review** | Generate structured notes and synthesis from papers you've collected. |
-| **arxiv** | Search arXiv.org for papers and download .tex sources. |
+| **literature-survey** | Comprehensive literature survey with incremental workflow: search → filter → download → cluster → report. |
 
 ### Commands (Direct, no LLM)
 
@@ -32,7 +31,8 @@
 
 | Tool | Description |
 |------|-------------|
-| **arxiv_search** | Search arXiv.org API with keyword search, date filtering, automatic .tex download |
+| **arxiv_search** | Search arXiv.org API for papers. Returns metadata only (title, authors, abstract, arxiv_id). No side effects. |
+| **arxiv_download** | Download arXiv papers by ID. Tries .tex source first, falls back to PDF. Requires absolute `output_dir` path. |
 | **github_search** | Search GitHub repositories by keyword, filter by language, sort by stars/updated |
 
 ---
@@ -214,17 +214,23 @@ Agent: [Reading selected_idea.md and related papers]
 
 ```
 ~/.openclaw/workspace/projects/
-├── .active                   # Current project ID
-├── nlp-summarization/        # Project A
-│   ├── project.json          # Metadata
-│   ├── task.json             # Task definition
-│   ├── search_results.md     # Search results
-│   ├── papers/               # Downloaded papers
-│   ├── repos/                # Cloned repos
-│   └── ideas/                # Generated ideas
+├── .active                      # Current project ID
+├── nlp-summarization/           # Project A
+│   ├── project.json             # Metadata
+│   ├── task.json                # Task definition
+│   ├── survey/
+│   │   ├── search_terms.json    # Search terms used
+│   │   └── report.md            # Final survey report
+│   ├── papers/
+│   │   ├── _downloads/          # Raw downloaded files
+│   │   ├── _meta/               # Paper metadata JSON files
+│   │   │   └── {arxiv_id}.json
+│   │   └── {direction}/         # Clustered papers by research direction
+│   ├── repos/                   # Cloned repos
+│   └── ideas/                   # Generated ideas
 │       ├── idea_1.md
 │       ├── idea_2.md
-│       └── selected_idea.md  # Best idea
+│       └── selected_idea.md     # Best idea
 └── another-project/
 ```
 

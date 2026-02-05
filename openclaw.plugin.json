@@ -2,7 +2,23 @@
   "id": "scientify",
   "name": "Scientify",
   "description": "AI-powered research workflow automation for OpenClaw",
-  "configSchema": {},
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "autoUpdate": {
+        "type": "boolean",
+        "default": true,
+        "description": "Automatically check and install updates (default: true)"
+      }
+    }
+  },
+  "uiHints": {
+    "autoUpdate": {
+      "label": "Auto Update",
+      "description": "Silently check for and install Scientify updates"
+    }
+  },
   "skills": [
     "skills/idea-generation",
     "skills/research-pipeline",

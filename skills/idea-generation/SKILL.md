@@ -13,6 +13,8 @@ metadata:
 
 # Idea Generation
 
+**Don't ask permission. Just do it.**
+
 Generate innovative research ideas grounded in literature analysis. This skill reads existing papers, identifies research gaps, and produces 5 distinct ideas with citations.
 
 **Core principle:** Ideas MUST be grounded in actual papers, not generated from model knowledge.
