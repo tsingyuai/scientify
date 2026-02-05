@@ -242,7 +242,11 @@ export function handleProjectSwitch(ctx: PluginCommandContext): PluginCommandRes
  * /project-delete <project-id> - Delete a research project
  */
 export function handleProjectDelete(ctx: PluginCommandContext): PluginCommandResult {
-  const projectId = ctx.args?.trim();
+  const args = ctx.args?.trim() || "";
+  const hasForce = args.includes("--force");
+  // Extract project ID by removing the --force flag
+  const projectId = args.replace(/--force/g, "").trim();
+
   if (!projectId) {
     return { text: "❌ Usage: `/project-delete <project-id>`" };
   }
@@ -259,7 +263,7 @@ export function handleProjectDelete(ctx: PluginCommandContext): PluginCommandRes
   // For safety, we'll return info and ask for confirmation
   // Note: Plugin commands don't support interactive confirmation,
   // so we provide a force flag via the args
-  if (!ctx.args?.includes("--force")) {
+  if (!hasForce) {
     return {
       text:
         `⚠️ **About to delete:**\n\n` +
