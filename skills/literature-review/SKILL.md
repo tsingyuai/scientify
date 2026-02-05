@@ -1,261 +1,391 @@
 ---
 name: literature-review
-description: "Generate reading notes and summaries from EXISTING papers (PDF/.tex files user already has). Use for: summarize papers, create reading notes, write literature review section. Does NOT search for new papers or generate research ideas."
+description: "Write a literature review or survey paper from EXISTING papers. Guides through reading, note-taking, synthesis, and structured writing. Use after /literature-survey has collected papers."
 metadata:
   {
     "openclaw":
       {
-        "emoji": "📖",
+        "emoji": "📝",
       },
   }
 ---
 
-# Literature Review
+# Literature Review Writing
 
-Generate structured notes and synthesis documents from academic papers. Use this skill when the user wants to:
-- Summarize papers they've collected
-- Create reading notes for a research topic
-- Write a literature review section
-- Compare methods across multiple papers
+Guide for writing a structured literature review or survey paper from papers you've already collected. This skill helps with reading strategy, note organization, and academic writing.
 
-## Workspace Convention (Project-based)
+**Use this skill when:**
+- You have collected papers (via `/literature-survey` or manually)
+- Need to write a literature review section for a thesis/paper
+- Writing a standalone survey paper
+- Synthesizing findings across multiple papers
 
-**IMPORTANT**: OpenClaw uses project-based workspaces. Each research topic has its own project directory.
+**NOT for:**
+- Searching and discovering new papers (use `/literature-survey`)
+- Generating research ideas (use `/idea-generation`)
 
-### Check Active Project First
+---
 
-Before starting, check the active project:
+## Prerequisites
+
+Before starting, ensure you have:
+1. Papers collected in `$WORKSPACE/papers/`
+2. Ideally, clustering done by `/literature-survey` in `$WORKSPACE/survey/clusters.json`
+
+Check active project:
 ```bash
 cat ~/.openclaw/workspace/projects/.active 2>/dev/null
+ls $WORKSPACE/papers/
 ```
 
-If a project is active, use `$WORKSPACE = ~/.openclaw/workspace/projects/{project_id}/`.
+---
 
-If no active project, use the flat structure: `~/.openclaw/workspace/`.
+## Phase 1: Reading Strategy
 
-### Project-based Structure (Recommended)
+### 1.1 Triage Papers by Priority
 
-```
-~/.openclaw/workspace/projects/{project-id}/
-├── project.json              # Project metadata
-├── papers/                   # Downloaded PDFs/tex files
-│   ├── 2401.12345/
-│   │   └── main.tex
-│   └── ...
-└── literature/               # Generated outputs
-    ├── notes/                # Per-paper notes
-    │   ├── 2401.12345.md
-    │   └── ...
-    ├── synthesis.md          # Cross-paper synthesis
-    ├── bibliography.bib      # BibTeX entries
-    └── review_draft.md       # Optional: formatted review
-```
+Based on clusters from survey, prioritize reading:
 
-### Flat Structure (Fallback)
+| Priority | Criteria | Reading Depth |
+|----------|----------|---------------|
+| P1 (必读) | 高引用、奠基性工作、你的直接相关方向 | 精读全文 |
+| P2 (重要) | 主要方法论、重要实验结果 | 读摘要+方法+实验 |
+| P3 (参考) | 辅助材料、边缘相关 | 仅读摘要 |
 
-```
-~/.openclaw/workspace/
-├── papers/
-└── literature/
-    ├── notes/
-    ├── synthesis.md
-    └── ...
+Create `$WORKSPACE/review/reading_plan.md`:
+
+```markdown
+# Reading Plan
+
+## P1 - 必读 (精读)
+- [ ] [paper_id]: [title] - [reason]
+- [ ] ...
+
+## P2 - 重要 (选读)
+- [ ] ...
+
+## P3 - 参考 (略读)
+- [ ] ...
 ```
 
-**File existence = step completion.** Skip steps whose output already exists.
+### 1.2 Reading Notes Template
 
-**In the steps below**, `$WORKSPACE` refers to the active project directory or `~/.openclaw/workspace/` if no project is active.
-
-## Step 1: Gather Papers
-
-Check what papers are available:
-
-1. **Check active project first**: `cat ~/.openclaw/workspace/projects/.active`
-2. **Look in project papers directory**: `ls -la $WORKSPACE/papers/`
-3. Check if user provided URLs or arXiv IDs
-
-If no papers found, ask user to provide:
-- ArXiv IDs (e.g., "2401.12345")
-- PDF URLs
-- Local file paths
-
-## Step 2: Read and Annotate Each Paper
-
-For each paper, create `$WORKSPACE/literature/notes/<paper_id>.md`:
-
-First, ensure the output directory exists:
-```bash
-mkdir -p $WORKSPACE/literature/notes
-```
+For each paper, create `$WORKSPACE/review/notes/{paper_id}.md`:
 
 ```markdown
 # [Paper Title]
 
-**ArXiv/DOI**: [id]
-**Authors**: [list]
+**ID**: [arxiv_id / DOI]
+**Authors**: [author list]
 **Year**: [year]
-**Venue**: [conference/journal if known]
+**Venue**: [conference/journal]
+**Priority**: P1/P2/P3
 
-## TL;DR
-[1-2 sentence summary of the main contribution]
+## One-sentence Summary
+[用一句话概括这篇论文的核心贡献]
 
-## Problem Statement
-[What problem does this paper address?]
+## Problem & Motivation
+- 研究什么问题？
+- 为什么重要？
+- 现有方法的不足？
 
 ## Method
-[Key approach, algorithm, or framework]
-
 ### Core Idea
-[The central insight or innovation]
+[核心创新点]
 
-### Technical Details
-[Important formulas, architectures, or algorithms]
+### Technical Approach
+[关键技术细节]
 
+### Key Equations
 ```latex
-[Key equations if applicable]
+[重要公式]
 ```
 
 ## Experiments
-- **Datasets**: [list]
-- **Baselines**: [list]
-- **Main Results**: [key numbers]
+- **Datasets**: [使用的数据集]
+- **Baselines**: [对比方法]
+- **Metrics**: [评价指标]
+- **Key Results**: [主要结论]
 
 ## Strengths
-- [strength 1]
-- [strength 2]
+1. [优点1]
+2. [优点2]
 
-## Weaknesses / Limitations
-- [limitation 1]
-- [limitation 2]
+## Limitations
+1. [局限1]
+2. [局限2]
 
-## Relevance to My Research
-[How does this paper relate to the user's work? Leave blank if unknown]
+## Connections
+- 与 [paper_x] 的关系：[描述]
+- 改进了 [method_y]：[如何改进]
+- 被 [paper_z] 引用/扩展：[描述]
 
-## Key Quotes
-> "[Important quote from the paper]" (Section X)
+## Quotes for Citation
+> "[重要原文]" (Section X, Page Y)
 
-## References to Follow
-- [Paper A]: [why interesting]
-- [Paper B]: [why interesting]
+## My Comments
+[你的思考、疑问、可能的改进方向]
 ```
 
-### Reading Strategy by Format
+---
 
-| Format | Method |
-|--------|--------|
-| `.tex` | Use `read` directly. Search for `\section`, `\begin{equation}` |
-| `.pdf` | Use `read` (OpenClaw supports PDF). Focus on abstract, intro, method, experiments |
-| URL | Use `web_fetch` to get content, then summarize |
+## Phase 2: Synthesis & Organization
 
-### Quality Checklist
+### 2.1 Build Comparison Table
 
-Before finishing a note, verify:
-- [ ] TL;DR captures the main contribution
-- [ ] Method section explains the approach clearly
-- [ ] At least 2 strengths and 2 limitations identified
-- [ ] Key equations/algorithms included if applicable
-
-## Step 3: Generate BibTeX
-
-Create `$WORKSPACE/literature/bibliography.bib`:
-
-```bibtex
-@article{author2024title,
-  title={Full Paper Title},
-  author={Last, First and Last2, First2},
-  journal={arXiv preprint arXiv:2401.12345},
-  year={2024}
-}
-```
-
-For arXiv papers, use this format. For published papers, include venue, volume, pages.
-
-## Step 4: Synthesize Across Papers
-
-Create `$WORKSPACE/literature/synthesis.md`:
+Create `$WORKSPACE/review/comparison.md`:
 
 ```markdown
-# Literature Synthesis: [Topic]
+# Method Comparison
 
-## Overview
-[Brief introduction to the research area]
-
-## Taxonomy of Approaches
-
-### Category A: [Name]
-Papers: [list]
-Key characteristics: [describe]
-
-### Category B: [Name]
-Papers: [list]
-Key characteristics: [describe]
-
-## Comparison Table
-
-| Paper | Method | Dataset | Key Metric | Result |
-|-------|--------|---------|------------|--------|
-| [A]   | ...    | ...     | ...        | ...    |
-| [B]   | ...    | ...     | ...        | ...    |
-
-## Evolution of Ideas
-[How has the field progressed? What are the trends?]
-
-## Open Problems
-1. [Gap 1]
-2. [Gap 2]
-
-## Recommendations
-[Which papers to read first? Which approaches are most promising?]
+| Paper | Year | Category | Key Innovation | Dataset | Metric | Result |
+|-------|------|----------|----------------|---------|--------|--------|
+| [A]   | 2023 | Data-driven | ... | ... | RMSE | 0.05 |
+| [B]   | 2022 | Hybrid | ... | ... | RMSE | 0.08 |
 ```
 
-## Step 5 (Optional): Draft Literature Review
+### 2.2 Timeline Analysis
 
-If user requests a formal review, create `$WORKSPACE/literature/review_draft.md`:
+Create `$WORKSPACE/review/timeline.md`:
 
 ```markdown
-# Literature Review: [Topic]
+# Research Timeline
+
+## 2018-2019: 早期探索
+- [Paper A]: 首次提出 X 方法
+- [Paper B]: 引入 Y 技术
+
+## 2020-2021: 方法成熟
+- [Paper C]: 提出 SOTA 方法
+- ...
+
+## 2022-2023: 新趋势
+- [Paper D]: 开始关注 Z 问题
+- ...
+
+## Key Milestones
+1. [Year]: [Event/Paper] - [Significance]
+```
+
+### 2.3 Taxonomy Design
+
+Create `$WORKSPACE/review/taxonomy.md`:
+
+```markdown
+# Taxonomy of Approaches
+
+## Dimension 1: Method Type
+├── Data-driven
+│   ├── Statistical (e.g., GPR, SVM)
+│   ├── Deep Learning
+│   │   ├── CNN-based
+│   │   ├── RNN/LSTM-based
+│   │   └── Transformer-based
+│   └── Hybrid
+└── Model-based
+    ├── Electrochemical
+    └── Equivalent Circuit
+
+## Dimension 2: Data Source
+├── Laboratory Data
+├── Real-world Driving Data
+└── Synthetic Data
+
+## Dimension 3: Prediction Horizon
+├── Short-term (< 100 cycles)
+├── Medium-term (100-500 cycles)
+└── Long-term (> 500 cycles)
+```
+
+---
+
+## Phase 3: Writing Structure
+
+### 3.1 Survey Paper Template
+
+Create `$WORKSPACE/review/draft.md`:
+
+```markdown
+# [Survey Title]: A Comprehensive Review
+
+## Abstract
+[Background - 1 sentence]
+[Problem - 1 sentence]
+[What this survey covers - 2 sentences]
+[Key findings - 2 sentences]
+[Conclusion - 1 sentence]
 
 ## 1. Introduction
-[Context and motivation for the review]
 
-## 2. Background
-[Essential concepts the reader needs]
+### 1.1 Background and Motivation
+[为什么这个领域重要？]
+[当前研究的热度和趋势]
 
-## 3. Survey of Methods
+### 1.2 Scope of This Survey
+[本综述覆盖的范围]
+[与已有综述的区别]
 
-### 3.1 [Category A]
-[Describe approaches in this category, cite papers]
+### 1.3 Contributions
+本文的主要贡献：
+1. [贡献1]
+2. [贡献2]
+3. [贡献3]
 
-### 3.2 [Category B]
-[Describe approaches in this category, cite papers]
+### 1.4 Organization
+本文结构如下：
+- Section 2: [内容]
+- Section 3: [内容]
+- ...
 
-## 4. Empirical Comparison
-[Summarize experimental findings across papers]
+## 2. Background and Preliminaries
 
-## 5. Discussion
-[Trends, gaps, and future directions]
+### 2.1 Problem Definition
+[正式定义研究问题]
 
-## 6. Conclusion
-[Key takeaways]
+### 2.2 Key Concepts
+[核心概念解释]
+
+### 2.3 Evaluation Metrics
+[常用评价指标]
+
+## 3. Taxonomy of Methods
+
+### 3.1 Category A: [Name]
+
+#### 3.1.1 Subcategory A.1
+[方法描述]
+[代表性工作]
+
+#### 3.1.2 Subcategory A.2
+...
+
+### 3.2 Category B: [Name]
+...
+
+## 4. Comparative Analysis
+
+### 4.1 Quantitative Comparison
+[对比表格]
+[结果分析]
+
+### 4.2 Qualitative Comparison
+[方法特点对比]
+[适用场景分析]
+
+## 5. Datasets and Benchmarks
+
+### 5.1 Public Datasets
+| Dataset | Size | Source | Features |
+|---------|------|--------|----------|
+| ... | ... | ... | ... |
+
+### 5.2 Benchmark Protocols
+[常用的实验设置]
+
+## 6. Challenges and Future Directions
+
+### 6.1 Open Challenges
+1. **Challenge 1**: [描述]
+2. **Challenge 2**: [描述]
+
+### 6.2 Emerging Trends
+1. **Trend 1**: [描述]
+2. **Trend 2**: [描述]
+
+### 6.3 Recommended Research Directions
+1. [方向1]
+2. [方向2]
+
+## 7. Conclusion
+[总结主要发现]
+[对领域的展望]
 
 ## References
-[BibTeX citations]
+[BibTeX entries]
 ```
 
-## Batch Processing
+### 3.2 Thesis Literature Review Template
 
-If reviewing more than 10 papers:
-1. First pass: Generate TL;DR only for all papers
-2. User selects which papers need full notes
-3. Second pass: Full notes for selected papers
-4. Final pass: Synthesis
+For a thesis chapter, use this structure:
 
-Do NOT process all papers with full detail in a single session—context will overflow.
+```markdown
+# Chapter 2: Literature Review
+
+## 2.1 Introduction
+[本章目标和结构]
+
+## 2.2 [Topic Area 1]
+[相关工作综述]
+
+## 2.3 [Topic Area 2]
+[相关工作综述]
+
+## 2.4 Summary and Research Gaps
+[总结现有工作的不足]
+[引出你的研究问题]
+```
+
+---
+
+## Phase 4: Writing Tips
+
+### Citation Density Guidelines
+
+| Section | Citation Density |
+|---------|------------------|
+| Abstract | 0 citations |
+| Introduction | 10-20 citations |
+| Background | 5-10 citations |
+| Main Survey | 50-100+ citations |
+| Conclusion | 2-5 citations |
+
+### Transition Phrases
+
+**Introducing similar work:**
+- "Similarly, [Author] proposed..."
+- "Following this direction, ..."
+- "Building upon [X], [Author] extended..."
+
+**Introducing contrasting work:**
+- "In contrast, [Author] argued..."
+- "However, [Author] took a different approach..."
+- "Unlike previous methods, ..."
+
+**Summarizing:**
+- "In summary, existing methods can be categorized into..."
+- "The key insight from these works is..."
+
+### Common Mistakes to Avoid
+
+1. **列举式写作** - 不要只是 "A did X, B did Y, C did Z"
+2. **缺乏比较** - 要分析方法之间的关系和区别
+3. **时态混乱** - 描述方法用现在时，描述实验结果用过去时
+4. **过度引用** - 不是每句话都需要引用
+5. **遗漏重要工作** - 确保覆盖领域的奠基性工作
+
+---
+
+## Output Files
+
+```
+$WORKSPACE/review/
+├── reading_plan.md       # 阅读计划
+├── notes/                # 阅读笔记
+│   ├── {paper_id}.md
+│   └── ...
+├── comparison.md         # 对比表格
+├── timeline.md           # 时间线分析
+├── taxonomy.md           # 分类体系
+├── draft.md              # 综述草稿
+└── bibliography.bib      # 参考文献
+```
+
+---
 
 ## Commands
 
-User can say:
-- "Review these papers" → Full workflow
-- "Just summarize [paper]" → Single paper note
-- "Compare [paper A] and [paper B]" → Focused comparison
-- "Write a literature review on [topic]" → Full review draft
+- "帮我写综述" → Full workflow from reading to writing
+- "生成阅读计划" → Create reading_plan.md
+- "对比这些论文" → Generate comparison.md
+- "写综述草稿" → Generate draft.md
+- "润色这一段" → Polish specific section
