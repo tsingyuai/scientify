@@ -1,3 +1,9 @@
+## [1.2.2](https://github.com/tsingyuai/scientific/compare/v1.2.1...v1.2.2) (2026-02-05)
+
+### Refactoring
+
+* **idea-generation:** make flexible, delegate search to literature-survey ([f90bc08](https://github.com/tsingyuai/scientific/commit/f90bc086f47c804529dbf945f56f3841d79f21fe))
+
 ## [1.2.1](https://github.com/tsingyuai/scientific/compare/v1.2.0...v1.2.1) (2026-02-05)
 
 ### Refactoring
