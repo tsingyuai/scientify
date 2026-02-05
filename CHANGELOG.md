@@ -1,3 +1,9 @@
+## [1.1.5](https://github.com/tsingyuai/scientific/compare/v1.1.4...v1.1.5) (2026-02-05)
+
+### Bug Fixes
+
+* parse --force flag correctly in project-delete command ([900f771](https://github.com/tsingyuai/scientific/commit/900f771acd9ea2ec66175ecea08743b2dd6aa0b0))
+
 ## [1.1.4](https://github.com/tsingyuai/scientific/compare/v1.1.3...v1.1.4) (2026-02-05)
 
 ### Bug Fixes
