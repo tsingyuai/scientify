@@ -1,3 +1,9 @@
+## [1.1.3](https://github.com/tsingyuai/scientific/compare/v1.1.2...v1.1.3) (2026-02-05)
+
+### Documentation
+
+* update installation instructions to use openclaw plugins install ([9772970](https://github.com/tsingyuai/scientific/commit/9772970687bdadd5913cf65210dd1df3dda76cdb))
+
 ## [1.1.2](https://github.com/tsingyuai/scientific/compare/v1.1.1...v1.1.2) (2026-02-05)
 
 ### Bug Fixes
