@@ -59,21 +59,13 @@ metadata:
 
 ## Installation
 
-Run:
-
 ```bash
-npm install -g scientify
+openclaw plugins install scientify
 ```
 
 Or let OpenClaw install it automatically when you use this skill.
 
-Then add to your OpenClaw config:
-
-```json
-{
-  "plugins": ["scientify"]
-}
-```
+> **Note:** Do NOT use `npm install scientify`. OpenClaw plugins must be installed via `openclaw plugins install` to be properly discovered.
 
 ## Usage Examples
 
