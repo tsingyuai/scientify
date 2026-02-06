@@ -1,3 +1,18 @@
+## [1.4.0](https://github.com/tsingyuai/scientific/compare/v1.3.0...v1.4.0) (2026-02-06)
+
+### Features
+
+* **skills:** split research-pipeline into multi-agent architecture ([ad407ac](https://github.com/tsingyuai/scientific/commit/ad407ac1b333cef2c2cef54fc36e64eaddc1aeca))
+
+### Bug Fixes
+
+* **ci:** auto-release on push via semantic-release ([4acdf7d](https://github.com/tsingyuai/scientific/commit/4acdf7db25ef39378939219ff0e65ca000e2961c))
+* **ci:** switch workflows from npm to pnpm ([151de00](https://github.com/tsingyuai/scientific/commit/151de00e2c57a79937478bc75519f1bdf2576135))
+
+### Refactoring
+
+* **tools:** split arxiv into search and download tools ([14a4ebc](https://github.com/tsingyuai/scientific/commit/14a4ebc73d74f19cea32e9b453c36930d4cedcb3))
+
 ## [1.3.0](https://github.com/tsingyuai/scientific/compare/v1.2.2...v1.3.0) (2026-02-05)
 
 ### Features

@@ -1,6 +1,6 @@
 {
   "name": "scientify",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Scientify - AI-powered research workflow automation for OpenClaw. Includes idea generation, literature review, research pipeline skills, and arxiv tool.",
   "type": "module",
   "main": "dist/index.js",
