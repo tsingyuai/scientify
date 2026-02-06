@@ -1,3 +1,9 @@
+## [1.4.1](https://github.com/tsingyuai/scientific/compare/v1.4.0...v1.4.1) (2026-02-06)
+
+### Documentation
+
+* fix install instructions in install-scientify skill ([26c3c90](https://github.com/tsingyuai/scientific/commit/26c3c90333d728e9817ecf7f3fc6ffa003bc8ebe))
+
 ## [1.4.0](https://github.com/tsingyuai/scientific/compare/v1.3.0...v1.4.0) (2026-02-06)
 
 ### Features
