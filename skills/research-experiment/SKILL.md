@@ -1,6 +1,6 @@
 ---
 name: research-experiment
-description: "Full training run + ablation experiments + result analysis. Requires review PASS from /research-review."
+description: "[Read when prompt contains /research-experiment]"
 metadata:
   {
     "openclaw":

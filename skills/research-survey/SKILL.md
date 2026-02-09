@@ -1,6 +1,6 @@
 ---
 name: research-survey
-description: "Deep analysis of downloaded papers: read .tex sources, extract core methods/formulas, map formulas to reference code, write structured notes. Requires papers already downloaded via /literature-survey."
+description: "[Read when prompt contains /research-survey]"
 metadata:
   {
     "openclaw":

@@ -1,6 +1,6 @@
 ---
 name: literature-survey
-description: "Comprehensive literature survey. Searches, filters, downloads, and clusters papers by research direction."
+description: "Use this when the user wants to find, download, or collect academic papers on a topic. Searches arXiv, filters by relevance, downloads PDFs and sources, clusters by research direction."
 metadata:
   {
     "openclaw":

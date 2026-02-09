@@ -1,6 +1,6 @@
 ---
 name: idea-generation
-description: "Generate 5 innovative research ideas from collected papers. Analyzes literature, identifies gaps, proposes novel methods with citations. Use for: 找研究方向, 生成创新点, find research gaps. Requires papers in workspace (run /literature-survey first if needed)."
+description: "Use this when the user wants research ideas, innovation points, or to find research gaps (找研究方向, 生成创新点). Generates 5 ideas from collected papers, identifies gaps, proposes novel methods with citations. Requires papers in workspace."
 metadata:
   {
     "openclaw":

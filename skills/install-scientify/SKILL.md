@@ -1,6 +1,6 @@
 ---
 name: install-scientify
-description: "Install Scientify - AI-powered research workflow automation plugin. Adds skills for research-pipeline (multi-agent orchestrator), literature-survey, idea-generation, arxiv tools, and workspace management commands."
+description: "Use this when the user wants to install or set up the Scientify research plugin. Adds research-pipeline, literature-survey, idea-generation, arxiv tools, and workspace management."
 metadata:
   {
     "openclaw":

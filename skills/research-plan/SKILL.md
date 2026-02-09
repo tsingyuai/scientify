@@ -1,6 +1,6 @@
 ---
 name: research-plan
-description: "Create a structured implementation plan from survey results. Produces dataset/model/training/testing plans. Requires survey_res.md from /research-survey."
+description: "[Read when prompt contains /research-plan]"
 metadata:
   {
     "openclaw":

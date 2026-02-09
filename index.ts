@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw";
 import {
   handleResearchStatus,
@@ -11,6 +12,7 @@ import { createArxivSearchTool } from "./src/tools/arxiv-search.js";
 import { createArxivDownloadTool } from "./src/tools/arxiv-download.js";
 import { createGithubSearchTool } from "./src/tools/github-search-tool.js";
 import { createAutoUpdaterService } from "./src/services/auto-updater.js";
+import { createSkillInjectionHook } from "./src/hooks/inject-skill.js";
 
 // Default: check every hour
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
@@ -87,6 +89,13 @@ export default function register(api: OpenClawPluginApi) {
     requireAuth: true, // Require auth for destructive operation
     handler: handleProjectDelete,
   });
+
+  // Inject SKILL.md content into sessions_spawn tasks.
+  // Sub-agents run in "minimal" prompt mode and don't see <available_skills>,
+  // so this hook reads the matching SKILL.md and embeds it in the task body.
+  // api.source = entry file path (e.g. dist/index.js); findPluginRoot() walks
+  // up to locate openclaw.plugin.json, which is always at the plugin root.
+  api.on("before_tool_call", createSkillInjectionHook(path.dirname(api.source)));
 
   api.logger.info("Scientify plugin loaded successfully");
 }

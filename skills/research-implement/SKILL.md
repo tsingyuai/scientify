@@ -1,6 +1,6 @@
 ---
 name: research-implement
-description: "Implement ML code from plan, run 2-epoch validation, verify real results. Requires plan_res.md from /research-plan."
+description: "[Read when prompt contains /research-implement]"
 metadata:
   {
     "openclaw":

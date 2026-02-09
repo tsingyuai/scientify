@@ -1,6 +1,6 @@
 ---
 name: write-review-paper
-description: "Write literature review or survey paper from EXISTING papers. Guides reading strategy, note-taking, synthesis, and academic writing. Use for: writing thesis lit review, standalone survey papers, synthesizing findings. NOT for: searching new papers (use /literature-survey), generating research ideas (use /idea-generation)."
+description: "Use this when the user wants to write a literature review, survey paper, or thesis chapter from existing papers. Guides reading strategy, note-taking, synthesis, and academic writing. NOT for searching new papers (/literature-survey) or generating ideas (/idea-generation)."
 metadata:
   {
     "openclaw":
