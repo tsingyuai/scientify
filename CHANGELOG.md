@@ -1,3 +1,13 @@
+## [1.5.0](https://github.com/tsingyuai/scientify/compare/v1.4.1...v1.5.0) (2026-02-11)
+
+### Features
+
+* add skill injection hook, enforce sequential pipeline, strengthen review ([aab81ec](https://github.com/tsingyuai/scientify/commit/aab81ec009333e1c1f9c45dfadfdb5bf7eb47d7a))
+
+### Bug Fixes
+
+* correct repository URL from scientific to scientify ([61cb6ec](https://github.com/tsingyuai/scientify/commit/61cb6ec81942c3564138f4042bce56243ae94215))
+
 ## [1.4.1](https://github.com/tsingyuai/scientific/compare/v1.4.0...v1.4.1) (2026-02-06)
 
 ### Documentation
