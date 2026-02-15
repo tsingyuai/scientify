@@ -1,3 +1,9 @@
+## [1.6.0](https://github.com/tsingyuai/scientify/compare/v1.5.0...v1.6.0) (2026-02-15)
+
+### Features
+
+* integrate Novix research pipeline improvements (high priority) ([7e6fbc8](https://github.com/tsingyuai/scientify/commit/7e6fbc8ee730916e70442e353a0ed8072bb0555e))
+
 ## [1.5.0](https://github.com/tsingyuai/scientify/compare/v1.4.1...v1.5.0) (2026-02-11)
 
 ### Features
