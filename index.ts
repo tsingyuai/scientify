@@ -12,8 +12,11 @@ import { createArxivSearchTool } from "./src/tools/arxiv-search.js";
 import { createArxivDownloadTool } from "./src/tools/arxiv-download.js";
 import { createGithubSearchTool } from "./src/tools/github-search-tool.js";
 import { createPaperBrowserTool } from "./src/tools/paper-browser.js";
+import { createOpenAlexSearchTool } from "./src/tools/openalex-search.js";
+import { createUnpaywallDownloadTool } from "./src/tools/unpaywall-download.js";
 import { createAutoUpdaterService } from "./src/services/auto-updater.js";
 import { createSkillInjectionHook } from "./src/hooks/inject-skill.js";
+import { createResearchModeHook } from "./src/hooks/research-mode.js";
 
 // Default: check every hour
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
@@ -24,6 +27,8 @@ export default function register(api: OpenClawPluginApi) {
   api.registerTool(createArxivDownloadTool());
   api.registerTool(createGithubSearchTool());
   api.registerTool(createPaperBrowserTool());
+  api.registerTool(createOpenAlexSearchTool());
+  api.registerTool(createUnpaywallDownloadTool());
 
   // Register auto-updater service (silent updates)
   const pluginConfig = api.pluginConfig as { autoUpdate?: boolean } | undefined;
@@ -99,5 +104,12 @@ export default function register(api: OpenClawPluginApi) {
   // up to locate openclaw.plugin.json, which is always at the plugin root.
   api.on("before_tool_call", createSkillInjectionHook(path.dirname(api.source)));
 
-  api.logger.info("Scientify plugin loaded successfully");
+  // Inject research mode prompt into all conversations.
+  // This reminds the agent to use research skills for academic tasks.
+  // The agent decides whether to use skills based on task type.
+  api.on("before_prompt_build", createResearchModeHook(), {
+    priority: 100, // High priority to inject early
+  });
+
+  api.logger.info("Scientify plugin loaded (research mode: always active)");
 }
