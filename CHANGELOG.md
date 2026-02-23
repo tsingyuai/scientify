@@ -1,3 +1,9 @@
+## [1.6.2](https://github.com/tsingyuai/scientify/compare/v1.6.1...v1.6.2) (2026-02-23)
+
+### Documentation
+
+* rewrite READMEs with 9 scenario-based sections, update skills and tools ([9773af5](https://github.com/tsingyuai/scientify/commit/9773af5c34aa42ec9d7cf656fa00d2274f866e27))
+
 ## [1.6.0](https://github.com/tsingyuai/scientify/compare/v1.5.0...v1.6.0) (2026-02-15)
 
 ### Features
