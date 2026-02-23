@@ -79,7 +79,7 @@ metadata:
 | `task` | string | 是 | 子 agent 的完整任务描述 |
 | `label` | string | 否 | 显示标签（如 "Deep Survey"） |
 | `model` | string | 否 | 模型覆盖（如 `tsingyu/gemini-3-flash-preview`） |
-| `runTimeoutSeconds` | number | 否 | 超时秒数 |
+| `runTimeoutSeconds` | number | 否 | 超时秒数（**必须设置，推荐 1800**） |
 
 **task 字段格式**（子 agent 是独立 session，看不到当前上下文）：
 
@@ -124,6 +124,7 @@ ACTIVE=$(cat ~/.openclaw/workspace/projects/.active 2>/dev/null)
 **如果缺失，调用 sessions_spawn 工具（然后停止，等待完成通知）：**
 - task: `"/literature-survey\n工作目录: {$W绝对路径}\n研究主题: {从task.json提取}\n请搜索、筛选、下载论文到工作目录的 papers/ 下。"`
 - label: `"Literature Survey"`
+- runTimeoutSeconds: `1800`
 
 **验证:** `ls $W/papers/_meta/*.json` 至少有 3 个文件
 
@@ -136,6 +137,7 @@ ACTIVE=$(cat ~/.openclaw/workspace/projects/.active 2>/dev/null)
 **如果缺失，先读取 Phase 1 摘要（论文数量、方向），然后调用 sessions_spawn 工具（然后停止，等待完成通知）：**
 - task: `"/research-survey\n工作目录: {$W绝对路径}\n上下文: 已下载 {N} 篇论文，方向包括 {directions}。\n重点论文: {top 3 arxiv_id 和标题}\n请深度分析论文、提取公式，写入 survey_res.md。"`
 - label: `"Deep Survey"`
+- runTimeoutSeconds: `1800`
 
 **验证:** `$W/survey_res.md` 存在且包含"核心方法对比"表格
 
@@ -148,6 +150,7 @@ ACTIVE=$(cat ~/.openclaw/workspace/projects/.active 2>/dev/null)
 **如果缺失，读取 survey_res.md 摘要，然后调用 sessions_spawn 工具（然后停止，等待完成通知）：**
 - task: `"/research-plan\n工作目录: {$W绝对路径}\n上下文: 调研发现核心方法是 {method}，推荐技术路线 {route}。\n关键公式: {1-2个公式}\n请制定实现计划到 plan_res.md。"`
 - label: `"Research Plan"`
+- runTimeoutSeconds: `1800`
 
 **验证:** `$W/plan_res.md` 存在且包含 4 个 section（Dataset/Model/Training/Testing）
 
@@ -160,6 +163,7 @@ ACTIVE=$(cat ~/.openclaw/workspace/projects/.active 2>/dev/null)
 **如果缺失，读取 plan_res.md 要点，然后调用 sessions_spawn 工具（然后停止，等待完成通知）：**
 - task: `"/research-implement\n工作目录: {$W绝对路径}\n上下文:\n- 计划包含 {N} 个组件: {list}\n- 数据集: {dataset}\n- 框架: PyTorch\n请实现代码到 project/，运行 2 epoch 验证，写入 ml_res.md。"`
 - label: `"Research Implement"`
+- runTimeoutSeconds: `1800`
 
 **验证:**
 - `$W/project/run.py` 存在
@@ -175,6 +179,7 @@ ACTIVE=$(cat ~/.openclaw/workspace/projects/.active 2>/dev/null)
 **如果没有 PASS，调用 sessions_spawn 工具（然后停止，等待完成通知）：**
 - task: `"/research-review\n工作目录: {$W绝对路径}\n上下文:\n- ml_res.md 显示 train_loss={value}\n- 计划在 plan_res.md\n请审查代码，如需修改则迭代修复（最多 3 轮）。"`
 - label: `"Research Review"`
+- runTimeoutSeconds: `1800`
 
 **验证:** 最新 `judge_v*.md` 中 `verdict: PASS` 或 `verdict: BLOCKED`
 
@@ -189,6 +194,7 @@ ACTIVE=$(cat ~/.openclaw/workspace/projects/.active 2>/dev/null)
 **如果缺失，调用 sessions_spawn 工具（然后停止，等待完成通知）：**
 - task: `"/research-experiment\n工作目录: {$W绝对路径}\n上下文:\n- Review PASS，代码已验证\n- plan_res.md 中指定 full epochs\n请执行完整训练 + 消融实验，写入 experiment_res.md。"`
 - label: `"Research Experiment"`
+- runTimeoutSeconds: `1800`
 
 **验证:** `$W/experiment_res.md` 包含 `[RESULT]` 行和消融表格
 

@@ -31,31 +31,37 @@ metadata:
 
 | Skill | Description |
 |-------|-------------|
-| **research-pipeline** | Orchestrator for end-to-end ML research. Spawns sub-agents for each phase. |
-| **research-survey** | Deep analysis of papers: extract formulas, produce method comparison. |
-| **research-plan** | 4-part implementation plan (Dataset/Model/Training/Testing). |
-| **research-implement** | Implement ML code, run 2-epoch validation with `uv` venv isolation. |
-| **research-review** | Review implementation against plan. Iterates up to 3 times. |
-| **research-experiment** | Full training + ablation experiments. |
-| **literature-survey** | Literature survey: search → filter → download → cluster → report. |
-| **idea-generation** | Generate research ideas from arXiv/GitHub papers. |
+| **research-pipeline** | End-to-end orchestrator. Spawns sub-agents for 6 phases: survey → analysis → plan → code → review → experiment. |
+| **literature-survey** | Search arXiv + OpenAlex → filter → download .tex sources → cluster → generate survey report. |
+| **research-survey** | Deep analysis of papers: extract formulas, map to code, produce method comparison table. |
+| **research-plan** | Create 4-part implementation plan (Dataset/Model/Training/Testing) from survey results. |
+| **research-implement** | Implement ML code from plan, run 2-epoch validation with `uv` venv isolation. |
+| **research-review** | Review implementation. Iterates fix → rerun → review up to 3 times. |
+| **research-experiment** | Full training + ablation experiments. Requires review PASS. |
+| **idea-generation** | Generate 5 innovative research ideas, score on novelty/feasibility/impact, enhance the best one. |
+| **write-review-paper** | Draft a review/survey paper from project research outputs. |
 
 ### Commands (Direct, no LLM)
 
 | Command | Description |
 |---------|-------------|
-| `/research-status` | Show workspace status |
-| `/papers` | List downloaded papers |
+| `/research-status` | Show workspace status and active project |
+| `/papers` | List downloaded papers with metadata |
 | `/ideas` | List generated ideas |
 | `/projects` | List all projects |
-| `/project-switch <id>` | Switch project |
-| `/project-delete <id>` | Delete project |
+| `/project-switch <id>` | Switch active project |
+| `/project-delete <id>` | Delete a project |
 
 ### Tools
 
-- **arxiv_search** - Search arXiv.org API for papers (metadata only)
-- **arxiv_download** - Download arXiv papers (.tex source or PDF)
-- **github_search** - Search GitHub repositories
+| Tool | Description |
+|------|-------------|
+| `arxiv_search` | Search arXiv papers. Returns metadata (title, authors, abstract, ID). Supports sorting by relevance/date. |
+| `arxiv_download` | Batch download papers by arXiv ID. Prefers .tex source (PDF fallback). |
+| `openalex_search` | Search cross-disciplinary papers via OpenAlex API. Returns DOI, authors, citation count, OA status. |
+| `unpaywall_download` | Download open access PDFs by DOI via Unpaywall. Non-OA papers silently skipped. |
+| `github_search` | Search GitHub repositories. Returns name, description, stars, URL. Supports language filtering. |
+| `paper_browser` | Paginated browsing of large paper files (.tex/.md) to avoid context overflow. |
 
 ## Installation
 
@@ -69,16 +75,22 @@ Or let OpenClaw install it automatically when you use this skill.
 
 ## Usage Examples
 
+### End-to-End Research
+
+```
+Research scaling laws for classical ML classifiers on Fashion-MNIST
+```
+
 ### Generate Research Ideas
 
 ```
-帮我调研 "长文档摘要" 领域，生成一些创新的研究想法
+Explore recent advances in protein folding and generate innovative research ideas
 ```
 
-### Daily Literature Tracking
+### Literature Survey Only
 
 ```
-帮我设置一个定时任务，每天检查 arXiv 上关于 "transformer efficiency" 的新论文，发到飞书
+Survey the latest papers on vision-language models for medical imaging
 ```
 
 ### Check Workspace
@@ -90,5 +102,5 @@ Or let OpenClaw install it automatically when you use this skill.
 ## Links
 
 - npm: https://www.npmjs.com/package/scientify
-- GitHub: https://github.com/tsingyuai/scientific
+- GitHub: https://github.com/tsingyuai/scientify
 - Author: tsingyuai
