@@ -7,7 +7,7 @@
 Scientify 是一个 OpenClaw 插件，提供 AI 驱动的科研工作流自动化功能。
 
 **核心组件：**
-- `src/tools/` - 工具实现（arxiv_search, arxiv_download, github_search）
+- `src/tools/` - 工具实现（arxiv_search, arxiv_download, openalex_search, unpaywall_download, github_search, paper_browser）
 - `src/commands.ts` - 聊天命令处理
 - `skills/` - 技能定义（随 npm 包发布）
 - `index.ts` - 插件入口
@@ -75,13 +75,22 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
 git push origin main
 ```
 
+> **严禁手动发布！**
+> - **不要** 手动执行 `npm publish`
+> - **不要** 手动修改 `package.json` 中的 `version` 字段
+> - **不要** 手动创建 `v*` git tag
+>
+> 版本号、tag、CHANGELOG、npm 发布全部由 CI (semantic-release) 自动处理。
+> 手动操作会导致版本号冲突（CI 基于 git tag 计算下一版本，手动发布会造成 tag 与 npm 不同步）。
+
 **CI 自动执行：**
-1. 分析 commit messages
-2. 计算新版本号
-3. 更新 package.json
-4. 生成 CHANGELOG.md
+1. 分析 commit messages（基于最后一个 `v*` tag 以来的所有 commits）
+2. 按 conventional commits 规则计算新版本号
+3. 更新 `package.json` version
+4. 生成 `CHANGELOG.md`
 5. 发布到 npm
-6. 创建 GitHub Release
+6. 创建 git tag (`v*`) 和 GitHub Release
+7. 提交 `chore(release): x.y.z [skip ci]`
 
 ### 6. 验证发布
 
@@ -90,6 +99,13 @@ npm view scientify versions
 ```
 
 或查看 GitHub Actions 运行状态。
+
+### 发布故障恢复
+
+如果手动发布导致版本号冲突：
+1. 在 npm 上确认最新版本：`npm view scientify version`
+2. 创建对应的 git tag：`git tag v<npm版本> && git push origin v<npm版本>`
+3. 下次 push 时 CI 会基于新 tag 计算正确版本号
 
 ## 文件结构
 
@@ -107,7 +123,10 @@ scientify/
 │   └── tools/
 │       ├── arxiv-search.ts         # ArXiv 搜索工具
 │       ├── arxiv-download.ts       # ArXiv 下载工具（含速率限制）
-│       └── github-search-tool.ts   # GitHub 搜索工具
+│       ├── openalex-search.ts      # OpenAlex 跨学科搜索
+│       ├── unpaywall-download.ts   # Unpaywall OA PDF 下载
+│       ├── github-search-tool.ts   # GitHub 搜索工具
+│       └── paper-browser.ts        # 论文分页浏览工具
 ├── skills/
 │   ├── _shared/
 │   │   └── workspace-spec.md       # 所有 skill 共享的工作空间规范
@@ -189,6 +208,6 @@ research-pipeline skill 中的代码执行依赖用户环境配置。
 
 ## 相关资源
 
-- GitHub: https://github.com/tsingyuai/scientific
+- GitHub: https://github.com/tsingyuai/scientify
 - npm: https://www.npmjs.com/package/scientify
 - OpenClaw 插件文档: 参考 clawdbot/docs/
