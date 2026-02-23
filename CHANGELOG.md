@@ -1,3 +1,9 @@
+## [1.7.4](https://github.com/tsingyuai/scientify/compare/v1.7.3...v1.7.4) (2026-02-23)
+
+### Documentation
+
+* add release workflow rules to CLAUDE.md — never manually npm publish ([f7722ed](https://github.com/tsingyuai/scientify/commit/f7722ed8c28946f2bb1b73802167c1580cdafe61))
+
 ## [1.6.2](https://github.com/tsingyuai/scientify/compare/v1.6.1...v1.6.2) (2026-02-23)
 
 ### Documentation
