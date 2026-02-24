@@ -1,3 +1,9 @@
+## [1.7.5](https://github.com/tsingyuai/scientify/compare/v1.7.4...v1.7.5) (2026-02-24)
+
+### Bug Fixes
+
+* move runtime deps from devDependencies to dependencies ([0c230cb](https://github.com/tsingyuai/scientify/commit/0c230cb6aad8216af661740626d9a508743601a5))
+
 ## [1.7.4](https://github.com/tsingyuai/scientify/compare/v1.7.3...v1.7.4) (2026-02-23)
 
 ### Documentation
