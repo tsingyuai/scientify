@@ -1,3 +1,9 @@
+## [1.7.6](https://github.com/tsingyuai/scientify/compare/v1.7.5...v1.7.6) (2026-02-25)
+
+### Documentation
+
+* add website link to README ([8da699d](https://github.com/tsingyuai/scientify/commit/8da699de4ab37ca599fc213d6db3c3c074879e5c))
+
 ## [1.7.5](https://github.com/tsingyuai/scientify/compare/v1.7.4...v1.7.5) (2026-02-24)
 
 ### Bug Fixes
