@@ -4,7 +4,7 @@
 
 Scientify 是一个 [OpenClaw](https://github.com/openclaw/openclaw) 插件，通过 LLM 驱动的子 agent 自动化完整的学术研究流程 — 从文献调研到实验执行。
 
-[English](./README.md)
+**官网：** [scientify.tech](https://scientify.tech) | [English](./README.md)
 
 ---
 

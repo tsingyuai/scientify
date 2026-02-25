@@ -4,7 +4,7 @@
 
 Scientify is an [OpenClaw](https://github.com/openclaw/openclaw) plugin that automates the full academic research pipeline — from literature survey to experiment execution — using LLM-driven sub-agents.
 
-[中文文档](./README.zh.md)
+**Website:** [scientify.tech](https://scientify.tech) | [中文文档](./README.zh.md)
 
 ---
 
