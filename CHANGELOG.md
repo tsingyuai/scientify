@@ -1,3 +1,9 @@
+## [1.8.0](https://github.com/tsingyuai/scientify/compare/v1.7.6...v1.8.0) (2026-02-25)
+
+### Features
+
+* inject workspace spec into system prompt and compress search results ([2dcfb91](https://github.com/tsingyuai/scientify/commit/2dcfb91076fbbbc05dfaeddff9edfaecdfbe6ccf))
+
 ## [1.7.6](https://github.com/tsingyuai/scientify/compare/v1.7.5...v1.7.6) (2026-02-25)
 
 ### Documentation
