@@ -1,3 +1,9 @@
+## [1.9.0](https://github.com/tsingyuai/scientify/compare/v1.8.0...v1.9.0) (2026-03-02)
+
+### Features
+
+* **signature:** add workflow-aware Scientify footer injection ([e984fc2](https://github.com/tsingyuai/scientify/commit/e984fc2d0bef9e3bb26861838f02a297f3c07533))
+
 ## [1.8.0](https://github.com/tsingyuai/scientify/compare/v1.7.6...v1.8.0) (2026-02-25)
 
 ### Features
