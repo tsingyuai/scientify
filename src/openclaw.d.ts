@@ -1,4 +1,31 @@
 declare module "openclaw" {
+  export interface RunCommandResult {
+    stdout: string;
+    stderr: string;
+    code: number | null;
+    signal: NodeJS.Signals | null;
+    killed: boolean;
+  }
+
+  export interface RuntimeSystemApi {
+    runCommandWithTimeout: (
+      argv: string[],
+      optionsOrTimeout:
+        | number
+        | {
+            timeoutMs: number;
+            cwd?: string;
+            input?: string;
+            env?: NodeJS.ProcessEnv;
+            windowsVerbatimArguments?: boolean;
+          },
+    ) => Promise<RunCommandResult>;
+  }
+
+  export interface PluginRuntime {
+    system: RuntimeSystemApi;
+  }
+
   export interface PluginCommandContext {
     senderId?: string;
     channel: string;
@@ -42,6 +69,7 @@ declare module "openclaw" {
     source: string;
     config: unknown;
     pluginConfig?: Record<string, unknown>;
+    runtime: PluginRuntime;
     logger: PluginLogger;
     registerTool: (tool: unknown, opts?: unknown) => void;
     registerHook: (events: string | string[], handler: unknown, opts?: unknown) => void;

@@ -323,6 +323,7 @@ openclaw gateway
 | Skill | 描述 |
 |-------|------|
 | **write-review-paper** | 基于项目研究产出撰写综述论文草稿。 |
+| **research-subscription** | 通过 `scientify_cron_job` 创建/查看/删除定时 Scientify 任务（研究推送或普通提醒）。 |
 
 ### Tools（LLM 可调用）
 
@@ -334,6 +335,7 @@ openclaw gateway
 | `unpaywall_download` | 通过 Unpaywall API 按 DOI 下载开放获取 PDF。非 OA 论文跳过不报错。 |
 | `github_search` | 搜索 GitHub 仓库，返回仓库名、描述、star 数、URL。支持语言过滤和排序。 |
 | `paper_browser` | 分页浏览大型论文文件（.tex/.md），避免一次性加载数千行到上下文。返回指定行范围和导航信息。 |
+| `scientify_cron_job` | 由模型管理 Scientify 定时任务（`upsert`/`list`/`remove`）。主要参数：`action`、`scope`、`schedule`、`topic`、`message`、`channel`、`to`、`no_deliver`、`job_id`。 |
 
 ### Commands（直接执行，不经 LLM）
 
@@ -345,6 +347,25 @@ openclaw gateway
 | `/projects` | 列出所有项目 |
 | `/project-switch <id>` | 切换当前项目 |
 | `/project-delete <id>` | 删除项目 |
+| `/research-subscribe ...` | 创建/更新定时 Scientify 任务（支持 `daily`、`weekly`、`every`、`at`、`cron`；可选参数：`--channel`、`--to`、`--topic`、`--message`、`--no-deliver`） |
+| `/research-subscriptions` | 查看你的 Scientify 定时任务 |
+| `/research-unsubscribe [job-id]` | 取消你的 Scientify 定时任务（或删除指定任务） |
+
+`/research-subscribe` 示例：
+- `/research-subscribe daily 09:00 Asia/Shanghai`（默认尽量推送到当前消息来源的用户/频道）
+- `/research-subscribe every 2h --channel feishu --to ou_xxx`
+- `/research-subscribe at 2m --channel feishu --to ou_xxx`
+- `/research-subscribe weekly mon 09:30 --channel telegram --to 123456789`
+- `/research-subscribe daily 08:00 --topic "LLM alignment"`
+- `/research-subscribe at 1m --message "Time to drink coffee."`
+- `/research-subscribe daily 09:00 --no-deliver`（仅后台运行，不主动推送）
+
+行为说明：
+- Scoped upsert：按 sender/channel 作用域覆盖更新，同一作用域新建任务会替换旧任务。
+- 提醒兜底：如果 `topic` 看起来是普通提醒（例如“提醒我睡觉”），Scientify 会自动按提醒消息处理，不走文献流水线。
+- 一次性研究任务（`at ... --topic ...`）使用“代表论文聚焦检索”；周期任务（`daily/weekly/every/cron`）保持“增量追踪”模式。
+- 存储位置：订阅任务保存在 OpenClaw cron 存储中，不写入项目 workspace 文件。
+- 全局查看：`openclaw cron list --all --json`
 
 ---
 

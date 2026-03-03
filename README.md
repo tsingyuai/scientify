@@ -323,6 +323,7 @@ You can also check status anytime with:
 | Skill | Description |
 |-------|-------------|
 | **write-review-paper** | Draft a review/survey paper from project research outputs. |
+| **research-subscription** | Create/list/remove scheduled Scientify jobs via `scientify_cron_job` (research digests or plain reminders). |
 
 ### Tools (available to LLM)
 
@@ -334,6 +335,7 @@ You can also check status anytime with:
 | `unpaywall_download` | Download open access PDFs by DOI via Unpaywall API. Non-OA papers are silently skipped (no failure). |
 | `github_search` | Search GitHub repositories. Returns repo name, description, stars, URL. Supports language filtering and sorting. |
 | `paper_browser` | Paginated browsing of large paper files (.tex/.md) to avoid loading thousands of lines into context. Returns specified line range with navigation info. |
+| `scientify_cron_job` | Manage scheduled Scientify jobs from the model (`upsert`/`list`/`remove`). Main fields: `action`, `scope`, `schedule`, `topic`, `message`, `channel`, `to`, `no_deliver`, `job_id`. |
 
 ### Commands (direct, no LLM)
 
@@ -345,6 +347,25 @@ You can also check status anytime with:
 | `/projects` | List all projects |
 | `/project-switch <id>` | Switch active project |
 | `/project-delete <id>` | Delete a project |
+| `/research-subscribe ...` | Create/update scheduled Scientify jobs (supports `daily`, `weekly`, `every`, `at`, `cron`; options: `--channel`, `--to`, `--topic`, `--message`, `--no-deliver`) |
+| `/research-subscriptions` | Show your scheduled Scientify jobs |
+| `/research-unsubscribe [job-id]` | Remove your scheduled Scientify jobs (or a specific job) |
+
+`/research-subscribe` examples:
+- `/research-subscribe daily 09:00 Asia/Shanghai` (auto-deliver to current chat sender/channel when possible)
+- `/research-subscribe every 2h --channel feishu --to ou_xxx`
+- `/research-subscribe at 2m --channel feishu --to ou_xxx`
+- `/research-subscribe weekly mon 09:30 --channel telegram --to 123456789`
+- `/research-subscribe daily 08:00 --topic "LLM alignment"`
+- `/research-subscribe at 1m --message "Time to drink coffee."`
+- `/research-subscribe daily 09:00 --no-deliver` (background only, no push)
+
+Behavior notes:
+- Scoped upsert: per sender/channel scope, creating a new subscription replaces the previous one in that scope.
+- Reminder-safe fallback: if `topic` looks like a plain reminder (for example "remind me to sleep"), Scientify auto-routes it as a reminder message instead of literature pipeline.
+- One-shot topic (`at ... --topic ...`) uses focused retrieval of representative papers; recurring schedules (`daily/weekly/every/cron`) use incremental tracking mode.
+- Storage: subscription jobs are stored in OpenClaw cron storage, not in project workspace files.
+- Global inspect: `openclaw cron list --all --json`
 
 ---
 

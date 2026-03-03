@@ -124,6 +124,15 @@ echo "battery-rul-prediction" > ~/.openclaw/workspace/projects/.active
 WORKSPACE=~/.openclaw/workspace/projects/$(cat ~/.openclaw/workspace/projects/.active)
 ```
 
+### Scheduled Subscription Storage
+
+`research-subscription` does not write project files under the workspace tree.
+
+- Scheduled jobs are stored in OpenClaw cron storage.
+- Use `openclaw cron list --all --json` for global inspection.
+- Use `/research-subscriptions` for scope-aware inspection within Scientify.
+- Use `/research-unsubscribe` to remove jobs for the current sender/channel scope.
+
 ## Skill Outputs Summary
 
 | Skill | Primary Outputs |
@@ -137,3 +146,4 @@ WORKSPACE=~/.openclaw/workspace/projects/$(cat ~/.openclaw/workspace/projects/.a
 | `/research-pipeline` | Orchestrator — spawns the above 5 skills in sequence |
 | `/idea-generation` | `ideas/` |
 | `/write-review-paper` | `review/` |
+| `research-subscription` | No workspace file output; creates OpenClaw cron jobs |

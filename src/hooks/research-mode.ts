@@ -29,6 +29,9 @@ Workspace: $W/projects/<topic>/. Check /research-status before writing. Active p
   ideas/ — gaps.md, idea_1..5.md, selected_idea.md, summary.md (idea-generation)
   review/ — reading_plan.md, notes/{id}.md, comparison.md, taxonomy.md, draft.md, bibliography.bib (write-review-paper)
   plan_res.md (research-plan) → project/ + ml_res.md (research-implement) → iterations/judge_v*.md (research-review) → experiment_res.md (research-experiment)
+Scheduling: if user asks for recurring or delayed push delivery (e.g. tomorrow at 08:00, daily digest), use research-subscription skill and call scientify_cron_job to create a real schedule.
+If it is a plain reminder (not research), set scientify_cron_job.message and do not default to the literature pipeline.
+Do not stop at explanation when user explicitly asks to set a schedule.
 Rules: file exists = step done (skip). Outputs immutable unless user asks. project/ mutable during review loop.
 Rigor: read first, think second, answer third. Never fabricate references or results. Every claim needs a source. Say "I don't know" when uncertain. Read actual papers, not just abstracts. Ground ideas in real papers.`;
 

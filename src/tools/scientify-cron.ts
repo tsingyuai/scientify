@@ -1,0 +1,209 @@
+import { Type } from "@sinclair/typebox";
+import type { PluginCommandContext, PluginCommandResult, PluginLogger, PluginRuntime } from "openclaw";
+import {
+  createResearchSubscribeHandler,
+  createResearchSubscriptionsHandler,
+  createResearchUnsubscribeHandler,
+} from "../research-subscriptions.js";
+import { Result } from "./result.js";
+
+export const ScientifyCronToolSchema = Type.Object({
+  action: Type.String({
+    description: 'Action: "upsert" | "list" | "remove".',
+  }),
+  scope: Type.Optional(
+    Type.String({
+      description: "Scope key for grouping jobs (e.g. user ID or thread ID). Default: global.",
+    }),
+  ),
+  schedule: Type.Optional(
+    Type.String({
+      description:
+        'Schedule expression for upsert. Examples: "daily 08:00 Asia/Shanghai", "weekly mon 09:00", "every 6h", "at 2m", "at 2026-03-04T08:00:00+08:00", "cron 0 9 * * * Asia/Shanghai".',
+    }),
+  ),
+  topic: Type.Optional(
+    Type.String({
+      description: "Optional research topic override used to build the scheduled task prompt.",
+    }),
+  ),
+  message: Type.Optional(
+    Type.String({
+      description:
+        "Optional plain reminder content for non-research jobs. When set, the scheduled task sends this reminder instead of running the default literature workflow.",
+    }),
+  ),
+  channel: Type.Optional(
+    Type.String({
+      description:
+        'Optional delivery channel override (e.g. "feishu", "telegram", "last"). If set to a concrete channel (not "last"), provide `to` as well.',
+    }),
+  ),
+  to: Type.Optional(
+    Type.String({
+      description:
+        'Delivery target override (channel-specific user/chat id). Required when `channel` is a concrete value like "feishu" or "telegram".',
+    }),
+  ),
+  no_deliver: Type.Optional(
+    Type.Boolean({
+      description: "If true, run in background without push delivery.",
+    }),
+  ),
+  job_id: Type.Optional(
+    Type.String({
+      description: "Specific job id to remove (only used when action=remove).",
+    }),
+  ),
+});
+
+type CronToolDeps = {
+  runtime: PluginRuntime;
+  logger: PluginLogger;
+};
+
+function readStringParam(params: Record<string, unknown>, key: string): string | undefined {
+  const value = params[key];
+  if (value === undefined || value === null) return undefined;
+  const str = String(value).trim();
+  return str.length > 0 ? str : undefined;
+}
+
+function readBooleanParam(params: Record<string, unknown>, key: string): boolean {
+  return params[key] === true;
+}
+
+function quoteArg(value: string): string {
+  if (/^[a-zA-Z0-9_./:+-]+$/.test(value)) return value;
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function normalizeScope(raw: string | undefined): string {
+  const base = (raw ?? "global")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return base || "global";
+}
+
+function buildToolContext(scope: string, args: string, commandBody: string): PluginCommandContext {
+  return {
+    senderId: `tool_${scope}`,
+    channel: "tool",
+    isAuthorizedSender: true,
+    args,
+    commandBody,
+    config: {},
+  };
+}
+
+function getResultText(result: PluginCommandResult): string {
+  return result.text ?? result.error ?? "";
+}
+
+function getResultError(result: PluginCommandResult): string | undefined {
+  const maybe = result.error?.trim();
+  return maybe && maybe.length > 0 ? maybe : undefined;
+}
+
+function buildSubscribeArgs(params: Record<string, unknown>): string {
+  const parts: string[] = [];
+  const schedule = readStringParam(params, "schedule") ?? "daily 09:00 Asia/Shanghai";
+  parts.push(schedule);
+
+  const topic = readStringParam(params, "topic");
+  if (topic) {
+    parts.push("--topic", quoteArg(topic));
+  }
+
+  const message = readStringParam(params, "message");
+  if (message) {
+    parts.push("--message", quoteArg(message));
+  }
+
+  const channel = readStringParam(params, "channel");
+  if (channel) {
+    parts.push("--channel", quoteArg(channel));
+  }
+
+  const to = readStringParam(params, "to");
+  if (to) {
+    parts.push("--to", quoteArg(to));
+  }
+
+  if (readBooleanParam(params, "no_deliver")) {
+    parts.push("--no-deliver");
+  }
+
+  return parts.join(" ");
+}
+
+export function createScientifyCronTool(deps: CronToolDeps) {
+  const subscribe = createResearchSubscribeHandler(deps);
+  const list = createResearchSubscriptionsHandler(deps);
+  const unsubscribe = createResearchUnsubscribeHandler(deps);
+
+  return {
+    label: "Scientify Cron",
+    name: "scientify_cron_job",
+    description:
+      "Manage Scientify scheduled jobs (research digests or plain reminders). Supports create/update (upsert), list, and remove.",
+    parameters: ScientifyCronToolSchema,
+    execute: async (_toolCallId: string, rawArgs: unknown) => {
+      const params = rawArgs as Record<string, unknown>;
+      const action = (readStringParam(params, "action") ?? "").toLowerCase();
+      const scope = normalizeScope(readStringParam(params, "scope"));
+
+      try {
+        if (action === "upsert") {
+          const args = buildSubscribeArgs(params);
+          const ctx = buildToolContext(scope, args, `/research-subscribe ${args}`);
+          const res = await subscribe(ctx);
+          const err = getResultError(res);
+          if (err) {
+            return Result.err("operation_failed", err);
+          }
+          const text = getResultText(res);
+          return Result.ok({ action, scope, result: text });
+        }
+
+        if (action === "list") {
+          const ctx = buildToolContext(scope, "", "/research-subscriptions");
+          const res = await list(ctx);
+          const err = getResultError(res);
+          if (err) {
+            return Result.err("operation_failed", err);
+          }
+          const text = getResultText(res);
+          return Result.ok({ action, scope, result: text });
+        }
+
+        if (action === "remove") {
+          const jobId = readStringParam(params, "job_id") ?? "";
+          const ctx = buildToolContext(scope, jobId, jobId ? `/research-unsubscribe ${jobId}` : "/research-unsubscribe");
+          const res = await unsubscribe(ctx);
+          const err = getResultError(res);
+          if (err) {
+            return Result.err("operation_failed", err);
+          }
+          const text = getResultText(res);
+          return Result.ok({ action, scope, result: text });
+        }
+
+        return Result.err(
+          "invalid_params",
+          'Invalid action. Use one of: "upsert", "list", "remove".',
+        );
+      } catch (error) {
+        deps.logger.warn(
+          `[scientify-cron-tool] ${action || "unknown"} failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return Result.err(
+          "runtime_error",
+          `scientify_cron_job failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    },
+  };
+}

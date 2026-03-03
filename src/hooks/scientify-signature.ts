@@ -24,6 +24,7 @@ const SCIENTIFY_TOOLS = new Set([
   "paper_browser",
   "openalex_search",
   "unpaywall_download",
+  "scientify_cron_job",
 ]);
 
 const SCIENTIFY_SKILLS = new Set([
@@ -36,10 +37,11 @@ const SCIENTIFY_SKILLS = new Set([
   "research-experiment",
   "literature-survey",
   "write-review-paper",
+  "research-subscription",
 ]);
 
 const SCIENTIFY_SKILL_COMMAND_RE =
-  /(?:^|\s)\/(idea-generation|research-pipeline|research-survey|research-plan|research-implement|research-review|research-experiment|literature-survey|write-review-paper)(?:\s|$)/i;
+  /(?:^|\s)\/(idea-generation|research-pipeline|research-survey|research-plan|research-implement|research-review|research-experiment|literature-survey|write-review-paper|research-subscription)(?:\s|$)/i;
 
 const SIGNATURE_PROMPT = `[Scientify Signature]
 If this response is based on Scientify workflow execution (Scientify skills/tools), append this exact footer at the end of your reply:

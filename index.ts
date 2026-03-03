@@ -8,15 +8,22 @@ import {
   handleProjectSwitch,
   handleProjectDelete,
 } from "./src/commands.js";
+import {
+  createResearchSubscribeHandler,
+  createResearchSubscriptionsHandler,
+  createResearchUnsubscribeHandler,
+} from "./src/research-subscriptions.js";
 import { createArxivSearchTool } from "./src/tools/arxiv-search.js";
 import { createArxivDownloadTool } from "./src/tools/arxiv-download.js";
 import { createGithubSearchTool } from "./src/tools/github-search-tool.js";
 import { createPaperBrowserTool } from "./src/tools/paper-browser.js";
 import { createOpenAlexSearchTool } from "./src/tools/openalex-search.js";
 import { createUnpaywallDownloadTool } from "./src/tools/unpaywall-download.js";
+import { createScientifyCronTool } from "./src/tools/scientify-cron.js";
 import { createAutoUpdaterService } from "./src/services/auto-updater.js";
 import { createSkillInjectionHook } from "./src/hooks/inject-skill.js";
 import { createResearchModeHook } from "./src/hooks/research-mode.js";
+import { createScientifyCronAutofillHook } from "./src/hooks/scientify-cron-autofill.js";
 import {
   createScientifyMessageTrackerHook,
   createScientifySignaturePromptHook,
@@ -35,6 +42,7 @@ export default function register(api: OpenClawPluginApi) {
   api.registerTool(createPaperBrowserTool());
   api.registerTool(createOpenAlexSearchTool());
   api.registerTool(createUnpaywallDownloadTool());
+  api.registerTool(createScientifyCronTool({ runtime: api.runtime, logger: api.logger }));
 
   // Register auto-updater service (silent updates)
   const pluginConfig = api.pluginConfig as { autoUpdate?: boolean } | undefined;
@@ -103,6 +111,31 @@ export default function register(api: OpenClawPluginApi) {
     handler: handleProjectDelete,
   });
 
+  api.registerCommand({
+    name: "research-subscribe",
+    description:
+      "Create/update a scheduled Scientify job (research digest or reminder). Example: /research-subscribe daily 09:00 Asia/Shanghai",
+    acceptsArgs: true,
+    requireAuth: false,
+    handler: createResearchSubscribeHandler({ runtime: api.runtime, logger: api.logger }),
+  });
+
+  api.registerCommand({
+    name: "research-subscriptions",
+    description: "Show your Scientify scheduled jobs",
+    acceptsArgs: false,
+    requireAuth: false,
+    handler: createResearchSubscriptionsHandler({ runtime: api.runtime, logger: api.logger }),
+  });
+
+  api.registerCommand({
+    name: "research-unsubscribe",
+    description: "Remove your Scientify scheduled jobs (or pass a specific job id)",
+    acceptsArgs: true,
+    requireAuth: false,
+    handler: createResearchUnsubscribeHandler({ runtime: api.runtime, logger: api.logger }),
+  });
+
   // Inject SKILL.md content into sessions_spawn tasks.
   // Sub-agents run in "minimal" prompt mode and don't see <available_skills>,
   // so this hook reads the matching SKILL.md and embeds it in the task body.
@@ -113,6 +146,8 @@ export default function register(api: OpenClawPluginApi) {
   // Track whether a session actually used Scientify skills/tools.
   // The signature is prompt-driven (model-generated), not post-processed.
   api.on("before_tool_call", createScientifyUsageTrackerHook());
+  // Auto-fill cron delivery target from current conversation origin when omitted.
+  api.on("before_tool_call", createScientifyCronAutofillHook());
   api.on("message_received", createScientifyMessageTrackerHook());
   api.on("session_end", createScientifyUsageCleanupHook());
 
