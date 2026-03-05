@@ -1,5 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { PluginCommandContext, PluginCommandResult, PluginLogger, PluginRuntime } from "openclaw";
+import { normalizeDeliveryChannelOverride } from "../research-subscriptions/delivery.js";
 import {
   createResearchSubscribeHandler,
   createResearchSubscriptionsHandler,
@@ -33,10 +34,40 @@ export const ScientifyCronToolSchema = Type.Object({
         "Optional plain reminder content for non-research jobs. When set, the scheduled task sends this reminder instead of running the default literature workflow.",
     }),
   ),
+  max_papers: Type.Optional(
+    Type.Number({
+      description: "Optional max papers per run for research subscriptions (1-20).",
+    }),
+  ),
+  recency_days: Type.Optional(
+    Type.Number({
+      description: "Optional recency preference in days for research subscriptions.",
+    }),
+  ),
+  candidate_pool: Type.Optional(
+    Type.Number({
+      description: "Optional candidate pool size before Top-K selection (3-50).",
+    }),
+  ),
+  score_weights: Type.Optional(
+    Type.Object({
+      relevance: Type.Optional(Type.Number({ description: "Weight for topical relevance (0-100)." })),
+      novelty: Type.Optional(Type.Number({ description: "Weight for novelty/freshness (0-100)." })),
+      authority: Type.Optional(Type.Number({ description: "Weight for source authority (0-100)." })),
+      actionability: Type.Optional(Type.Number({ description: "Weight for practical actionability (0-100)." })),
+    }),
+  ),
+  sources: Type.Optional(
+    Type.Array(
+      Type.String({
+        description: "Optional preferred search sources, e.g. ['arxiv','openalex'].",
+      }),
+    ),
+  ),
   channel: Type.Optional(
     Type.String({
       description:
-        'Optional delivery channel override (e.g. "feishu", "telegram", "last"). If set to a concrete channel (not "last"), provide `to` as well.',
+        'Optional delivery channel override (e.g. "feishu", "telegram", "last", "webui", "tui"). "webui"/"tui" are aliases of "last". If set to a concrete channel (not "last"), provide `to` as well.',
     }),
   ),
   to: Type.Optional(
@@ -71,6 +102,33 @@ function readStringParam(params: Record<string, unknown>, key: string): string |
 
 function readBooleanParam(params: Record<string, unknown>, key: string): boolean {
   return params[key] === true;
+}
+
+function readNumberParam(params: Record<string, unknown>, key: string): number | undefined {
+  const value = params[key];
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return value;
+}
+
+function readScoreWeightsParam(params: Record<string, unknown>): string | undefined {
+  const raw = params.score_weights;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const record = raw as Record<string, unknown>;
+
+  const entries: Array<[string, number]> = [];
+  const pushIfValid = (key: string) => {
+    const value = record[key];
+    if (typeof value !== "number" || !Number.isFinite(value)) return;
+    entries.push([key, value]);
+  };
+
+  pushIfValid("relevance");
+  pushIfValid("novelty");
+  pushIfValid("authority");
+  pushIfValid("actionability");
+
+  if (entries.length === 0) return undefined;
+  return entries.map(([key, value]) => `${key}:${value}`).join(",");
 }
 
 function quoteArg(value: string): string {
@@ -122,9 +180,40 @@ function buildSubscribeArgs(params: Record<string, unknown>): string {
     parts.push("--message", quoteArg(message));
   }
 
+  const maxPapers = readNumberParam(params, "max_papers");
+  if (maxPapers !== undefined) {
+    parts.push("--max-papers", String(Math.floor(maxPapers)));
+  }
+
+  const recencyDays = readNumberParam(params, "recency_days");
+  if (recencyDays !== undefined) {
+    parts.push("--recency-days", String(Math.floor(recencyDays)));
+  }
+
+  const candidatePool = readNumberParam(params, "candidate_pool");
+  if (candidatePool !== undefined) {
+    parts.push("--candidate-pool", String(Math.floor(candidatePool)));
+  }
+
+  const scoreWeights = readScoreWeightsParam(params);
+  if (scoreWeights) {
+    parts.push("--score-weights", quoteArg(scoreWeights));
+  }
+
+  const rawSources = params.sources;
+  if (Array.isArray(rawSources)) {
+    const sources = rawSources
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim().toLowerCase())
+      .filter((item) => item.length > 0);
+    if (sources.length > 0) {
+      parts.push("--sources", quoteArg([...new Set(sources)].join(",")));
+    }
+  }
+
   const channel = readStringParam(params, "channel");
   if (channel) {
-    parts.push("--channel", quoteArg(channel));
+    parts.push("--channel", quoteArg(normalizeDeliveryChannelOverride(channel)));
   }
 
   const to = readStringParam(params, "to");

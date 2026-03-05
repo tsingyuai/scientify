@@ -25,6 +25,7 @@ const SCIENTIFY_TOOLS = new Set([
   "openalex_search",
   "unpaywall_download",
   "scientify_cron_job",
+  "scientify_literature_state",
 ]);
 
 const SCIENTIFY_SKILLS = new Set([

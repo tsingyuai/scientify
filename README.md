@@ -335,7 +335,8 @@ You can also check status anytime with:
 | `unpaywall_download` | Download open access PDFs by DOI via Unpaywall API. Non-OA papers are silently skipped (no failure). |
 | `github_search` | Search GitHub repositories. Returns repo name, description, stars, URL. Supports language filtering and sorting. |
 | `paper_browser` | Paginated browsing of large paper files (.tex/.md) to avoid loading thousands of lines into context. Returns specified line range with navigation info. |
-| `scientify_cron_job` | Manage scheduled Scientify jobs from the model (`upsert`/`list`/`remove`). Main fields: `action`, `scope`, `schedule`, `topic`, `message`, `channel`, `to`, `no_deliver`, `job_id`. |
+| `scientify_cron_job` | Manage scheduled Scientify jobs from the model (`upsert`/`list`/`remove`). Main fields: `action`, `scope`, `schedule`, `topic`, `message`, `max_papers`, `recency_days`, `candidate_pool`, `score_weights`, `sources`, `channel`, `to`, `no_deliver`, `job_id`. |
+| `scientify_literature_state` | Persistent incremental state for subscriptions: `prepare` dedupe context (+ memory hints), `record` pushed papers, `feedback` lightweight preference memory, and `status` inspection with traceable logs. |
 
 ### Commands (direct, no LLM)
 
@@ -347,7 +348,7 @@ You can also check status anytime with:
 | `/projects` | List all projects |
 | `/project-switch <id>` | Switch active project |
 | `/project-delete <id>` | Delete a project |
-| `/research-subscribe ...` | Create/update scheduled Scientify jobs (supports `daily`, `weekly`, `every`, `at`, `cron`; options: `--channel`, `--to`, `--topic`, `--message`, `--no-deliver`) |
+| `/research-subscribe ...` | Create/update scheduled Scientify jobs (supports `daily`, `weekly`, `every`, `at`, `cron`; options: `--channel`, `--to`, `--topic`, `--message`, `--max-papers`, `--recency-days`, `--candidate-pool`, `--score-weights`, `--sources`, `--no-deliver`) |
 | `/research-subscriptions` | Show your scheduled Scientify jobs |
 | `/research-unsubscribe [job-id]` | Remove your scheduled Scientify jobs (or a specific job) |
 
@@ -356,14 +357,21 @@ You can also check status anytime with:
 - `/research-subscribe every 2h --channel feishu --to ou_xxx`
 - `/research-subscribe at 2m --channel feishu --to ou_xxx`
 - `/research-subscribe weekly mon 09:30 --channel telegram --to 123456789`
+- `/research-subscribe at 2m --channel webui` (`webui`/`tui` are aliases of `last`)
 - `/research-subscribe daily 08:00 --topic "LLM alignment"`
+- `/research-subscribe daily 08:00 --topic "LLM alignment" --max-papers 5 --recency-days 30 --sources arxiv,openalex`
+- `/research-subscribe daily 08:00 --topic "LLM alignment" --candidate-pool 12 --score-weights relevance:45,novelty:20,authority:25,actionability:10`
 - `/research-subscribe at 1m --message "Time to drink coffee."`
 - `/research-subscribe daily 09:00 --no-deliver` (background only, no push)
 
 Behavior notes:
 - Scoped upsert: per sender/channel scope, creating a new subscription replaces the previous one in that scope.
+- Delivery aliases: `--channel webui` and `--channel tui` map to `last`; they do not require `--to`.
 - Reminder-safe fallback: if `topic` looks like a plain reminder (for example "remind me to sleep"), Scientify auto-routes it as a reminder message instead of literature pipeline.
 - One-shot topic (`at ... --topic ...`) uses focused retrieval of representative papers; recurring schedules (`daily/weekly/every/cron`) use incremental tracking mode.
+- Recurring incremental mode uses candidate-pool ranking before Top-K selection; if no unseen paper is found, it runs one representative fallback pass before returning empty.
+- Lightweight preference memory is stored backend-only (keyword/source affinities) and used to rerank future pushes quietly.
+- Incremental state is persisted under `~/.openclaw/workspace/scientify/` (`literature-state.json`, `literature-push-log.jsonl`) for dedupe + traceability.
 - Storage: subscription jobs are stored in OpenClaw cron storage, not in project workspace files.
 - Global inspect: `openclaw cron list --all --json`
 

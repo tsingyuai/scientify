@@ -20,6 +20,7 @@ import { createPaperBrowserTool } from "./src/tools/paper-browser.js";
 import { createOpenAlexSearchTool } from "./src/tools/openalex-search.js";
 import { createUnpaywallDownloadTool } from "./src/tools/unpaywall-download.js";
 import { createScientifyCronTool } from "./src/tools/scientify-cron.js";
+import { createScientifyLiteratureStateTool } from "./src/tools/scientify-literature-state.js";
 import { createAutoUpdaterService } from "./src/services/auto-updater.js";
 import { createSkillInjectionHook } from "./src/hooks/inject-skill.js";
 import { createResearchModeHook } from "./src/hooks/research-mode.js";
@@ -43,6 +44,7 @@ export default function register(api: OpenClawPluginApi) {
   api.registerTool(createOpenAlexSearchTool());
   api.registerTool(createUnpaywallDownloadTool());
   api.registerTool(createScientifyCronTool({ runtime: api.runtime, logger: api.logger }));
+  api.registerTool(createScientifyLiteratureStateTool());
 
   // Register auto-updater service (silent updates)
   const pluginConfig = api.pluginConfig as { autoUpdate?: boolean } | undefined;

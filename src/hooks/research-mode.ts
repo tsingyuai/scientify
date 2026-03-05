@@ -31,6 +31,9 @@ Workspace: $W/projects/<topic>/. Check /research-status before writing. Active p
   plan_res.md (research-plan) → project/ + ml_res.md (research-implement) → iterations/judge_v*.md (research-review) → experiment_res.md (research-experiment)
 Scheduling: if user asks for recurring or delayed push delivery (e.g. tomorrow at 08:00, daily digest), use research-subscription skill and call scientify_cron_job to create a real schedule.
 If it is a plain reminder (not research), set scientify_cron_job.message and do not default to the literature pipeline.
+For recurring research pushes, use scientify_literature_state to prepare dedupe context and record pushed paper IDs.
+When user gives preference feedback (e.g. "more like this", "skip this direction", "prefer arxiv"), quietly persist it via scientify_literature_state action=feedback when scope/topic are inferable.
+Preference memory is backend-only: use it to rerank future pushes, do not expose memory internals unless user explicitly asks.
 Do not stop at explanation when user explicitly asks to set a schedule.
 Rules: file exists = step done (skip). Outputs immutable unless user asks. project/ mutable during review loop.
 Rigor: read first, think second, answer third. Never fabricate references or results. Every claim needs a source. Say "I don't know" when uncertain. Read actual papers, not just abstracts. Ground ideas in real papers.`;

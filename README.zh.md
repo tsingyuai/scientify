@@ -335,7 +335,8 @@ openclaw gateway
 | `unpaywall_download` | 通过 Unpaywall API 按 DOI 下载开放获取 PDF。非 OA 论文跳过不报错。 |
 | `github_search` | 搜索 GitHub 仓库，返回仓库名、描述、star 数、URL。支持语言过滤和排序。 |
 | `paper_browser` | 分页浏览大型论文文件（.tex/.md），避免一次性加载数千行到上下文。返回指定行范围和导航信息。 |
-| `scientify_cron_job` | 由模型管理 Scientify 定时任务（`upsert`/`list`/`remove`）。主要参数：`action`、`scope`、`schedule`、`topic`、`message`、`channel`、`to`、`no_deliver`、`job_id`。 |
+| `scientify_cron_job` | 由模型管理 Scientify 定时任务（`upsert`/`list`/`remove`）。主要参数：`action`、`scope`、`schedule`、`topic`、`message`、`max_papers`、`recency_days`、`candidate_pool`、`score_weights`、`sources`、`channel`、`to`、`no_deliver`、`job_id`。 |
+| `scientify_literature_state` | 订阅增量状态工具：`prepare` 获取去重上下文（含记忆提示）、`record` 记录已推送论文、`feedback` 写入轻量偏好记忆、`status` 查看状态与可追溯日志。 |
 
 ### Commands（直接执行，不经 LLM）
 
@@ -347,7 +348,7 @@ openclaw gateway
 | `/projects` | 列出所有项目 |
 | `/project-switch <id>` | 切换当前项目 |
 | `/project-delete <id>` | 删除项目 |
-| `/research-subscribe ...` | 创建/更新定时 Scientify 任务（支持 `daily`、`weekly`、`every`、`at`、`cron`；可选参数：`--channel`、`--to`、`--topic`、`--message`、`--no-deliver`） |
+| `/research-subscribe ...` | 创建/更新定时 Scientify 任务（支持 `daily`、`weekly`、`every`、`at`、`cron`；可选参数：`--channel`、`--to`、`--topic`、`--message`、`--max-papers`、`--recency-days`、`--candidate-pool`、`--score-weights`、`--sources`、`--no-deliver`） |
 | `/research-subscriptions` | 查看你的 Scientify 定时任务 |
 | `/research-unsubscribe [job-id]` | 取消你的 Scientify 定时任务（或删除指定任务） |
 
@@ -356,14 +357,21 @@ openclaw gateway
 - `/research-subscribe every 2h --channel feishu --to ou_xxx`
 - `/research-subscribe at 2m --channel feishu --to ou_xxx`
 - `/research-subscribe weekly mon 09:30 --channel telegram --to 123456789`
+- `/research-subscribe at 2m --channel webui`（`webui`/`tui` 是 `last` 的别名）
 - `/research-subscribe daily 08:00 --topic "LLM alignment"`
+- `/research-subscribe daily 08:00 --topic "LLM alignment" --max-papers 5 --recency-days 30 --sources arxiv,openalex`
+- `/research-subscribe daily 08:00 --topic "LLM alignment" --candidate-pool 12 --score-weights relevance:45,novelty:20,authority:25,actionability:10`
 - `/research-subscribe at 1m --message "Time to drink coffee."`
 - `/research-subscribe daily 09:00 --no-deliver`（仅后台运行，不主动推送）
 
 行为说明：
 - Scoped upsert：按 sender/channel 作用域覆盖更新，同一作用域新建任务会替换旧任务。
+- Delivery alias：`--channel webui` 和 `--channel tui` 会映射到 `last`，不需要 `--to`。
 - 提醒兜底：如果 `topic` 看起来是普通提醒（例如“提醒我睡觉”），Scientify 会自动按提醒消息处理，不走文献流水线。
 - 一次性研究任务（`at ... --topic ...`）使用“代表论文聚焦检索”；周期任务（`daily/weekly/every/cron`）保持“增量追踪”模式。
+- 周期增量模式会先构建候选池并评分后再选 Top-K；若本轮无“未推送新文献”，会自动再跑一轮代表性回退检索，再决定是否返回空结果。
+- 轻量偏好记忆（关键词/来源亲和）仅后台保存，不默认展示给用户，会静默影响后续排序。
+- 增量状态会持久化到 `~/.openclaw/workspace/scientify/`（`literature-state.json`、`literature-push-log.jsonl`），用于去重与可追溯。
 - 存储位置：订阅任务保存在 OpenClaw cron 存储中，不写入项目 workspace 文件。
 - 全局查看：`openclaw cron list --all --json`
 

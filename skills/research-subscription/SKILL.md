@@ -39,6 +39,12 @@ Routing rules:
 - Research digest / paper tracking request: pass `topic`, leave `message` unset.
 - Plain reminder request: pass `message`, do not set `topic`.
 - If request is ambiguous, ask one concise clarification question before tool call.
+- For recurring research subscriptions, prefer setting lightweight preferences:
+  - `max_papers` (default 3)
+  - `recency_days` (optional)
+  - `sources` (optional, e.g. `["arxiv","openalex"]`)
+  - `candidate_pool` (optional, default around 10)
+  - `score_weights` (optional object with `relevance`/`novelty`/`authority`/`actionability`)
 
 ## Scheduling format
 
@@ -54,7 +60,8 @@ For `action: "upsert"`, set `schedule` to one of:
 ## Delivery fields
 
 - Optional `channel`: `feishu`, `telegram`, `slack`, `discord`, `last`, and others
-- Optional `to`: channel-specific user or chat id
+- Optional aliases: `webui`, `tui` (both map to `last`)
+- Optional `to`: channel-specific user or chat id (required only for concrete channels like `feishu`/`telegram`, not for `last`/`webui`/`tui`)
 - Optional `no_deliver: true`: run in background without push
 
 If the user does not specify destination, leave `channel` and `to` unset to use default routing.
@@ -63,6 +70,11 @@ If the user does not specify destination, leave `channel` and `to` unset to use 
 
 If the user gives a clear topic, pass it as `topic` (for example, `"LLM alignment"`).
 This focuses scheduled research content on that topic.
+Recurring research jobs automatically use `scientify_literature_state` at runtime
+to prepare dedupe context and record pushed paper IDs for traceability.
+If an incremental pass returns no unseen papers, run one fallback representative pass before returning empty.
+If user gives explicit preference feedback during follow-up (read/skip/star style intent, source preference, direction preference),
+persist it via `scientify_literature_state` action=`feedback` (backend-only memory, not user-facing by default).
 
 ## Message field (plain reminder)
 

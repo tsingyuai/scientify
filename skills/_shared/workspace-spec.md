@@ -129,6 +129,9 @@ WORKSPACE=~/.openclaw/workspace/projects/$(cat ~/.openclaw/workspace/projects/.a
 `research-subscription` does not write project files under the workspace tree.
 
 - Scheduled jobs are stored in OpenClaw cron storage.
+- Incremental dedupe state/logs are stored under `~/.openclaw/workspace/scientify/`:
+  - `literature-state.json`
+  - `literature-push-log.jsonl`
 - Use `openclaw cron list --all --json` for global inspection.
 - Use `/research-subscriptions` for scope-aware inspection within Scientify.
 - Use `/research-unsubscribe` to remove jobs for the current sender/channel scope.
@@ -146,4 +149,4 @@ WORKSPACE=~/.openclaw/workspace/projects/$(cat ~/.openclaw/workspace/projects/.a
 | `/research-pipeline` | Orchestrator — spawns the above 5 skills in sequence |
 | `/idea-generation` | `ideas/` |
 | `/write-review-paper` | `review/` |
-| `research-subscription` | No workspace file output; creates OpenClaw cron jobs |
+| `research-subscription` | No project-tree output; creates OpenClaw cron jobs and updates `~/.openclaw/workspace/scientify/` incremental state logs (including lightweight preference-memory feedback) |
