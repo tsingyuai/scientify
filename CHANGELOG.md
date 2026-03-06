@@ -1,3 +1,9 @@
+## [1.10.3](https://github.com/tsingyuai/scientify/compare/v1.10.2...v1.10.3) (2026-03-06)
+
+### Bug Fixes
+
+* canonicalize literature-state scope and restore traceable follow-up answers ([cd515c9](https://github.com/tsingyuai/scientify/commit/cd515c9b21410f6bcc7eb2db6b73431dbb6e073c))
+
 ## [1.10.2](https://github.com/tsingyuai/scientify/compare/v1.10.1...v1.10.2) (2026-03-06)
 
 ### Bug Fixes
