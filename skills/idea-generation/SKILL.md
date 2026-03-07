@@ -19,32 +19,27 @@ Generate innovative research ideas grounded in literature analysis. This skill r
 
 **Core principle:** Ideas MUST be grounded in actual papers, not generated from model knowledge.
 
-**Workspace:** See `../_shared/workspace-spec.md` for directory structure. Outputs go to `$WORKSPACE/ideas/`.
+**Workspace:** `$W` = working directory provided in task parameter. Outputs go to `$W/ideas/`.
 
 ---
 
 ## Step 1: Check Workspace Resources
 
-First, check what resources already exist:
+First, check what resources already exist in `$W`:
 
 ```bash
-# Check active project
-cat ~/.openclaw/workspace/projects/.active 2>/dev/null
-
-# Check papers
-ls ~/.openclaw/workspace/projects/*/papers/ 2>/dev/null | head -20
-
-# Check survey results
-cat ~/.openclaw/workspace/projects/*/survey/clusters.json 2>/dev/null | head -5
+ls $W/papers/ 2>/dev/null | head -20
+ls $W/papers/_meta/ 2>/dev/null | head -10
+ls $W/survey/ 2>/dev/null
 ```
 
 ### Assess Available Resources
 
 | Resource | Location | Status |
 |----------|----------|--------|
-| Papers | `$WORKSPACE/papers/` | Count: ? |
-| Survey clusters | `$WORKSPACE/survey/clusters.json` | Exists: Y/N |
-| Repos | `$WORKSPACE/repos/` | Count: ? |
+| Papers | `$W/papers/` | Count: ? |
+| Survey clusters | `$W/survey/clusters.json` | Exists: Y/N |
+| Repos | `$W/repos/` | Count: ? |
 
 ---
 
@@ -57,14 +52,14 @@ Based on workspace state, ask user:
 >
 > Options:
 > 1. **Use existing papers** - Generate ideas from current collection
-> 2. **Search more** - Run `/literature-survey` to expand collection
+> 2. **Search more** - Run `/research-collect` to expand collection
 > 3. **Quick search** - Add 5-10 more papers on specific topic
 
 **If no papers:**
 > 📭 No papers found in workspace.
 >
 > To generate grounded ideas, I need literature. Options:
-> 1. **Run /literature-survey** - Comprehensive search (100+ papers, recommended)
+> 1. **Run /research-collect** - Comprehensive search (100+ papers, recommended)
 > 2. **Quick search** - Fetch 10-15 papers on your topic now
 > 3. **You provide papers** - Point me to existing PDFs/tex files
 
@@ -72,17 +67,17 @@ Based on workspace state, ask user:
 
 ## Step 3: Acquire Resources (if needed)
 
-### Option A: Delegate to /literature-survey (Recommended)
+### Option A: Delegate to /research-collect (Recommended)
 
 If user wants comprehensive search:
 ```
-Please run: /literature-survey {topic}
+Please run: /research-collect {topic}
 
 This will:
 - Search 100+ papers systematically
 - Filter by relevance (score ≥4)
 - Cluster into research directions
-- Save to $WORKSPACE/papers/
+- Save to $W/papers/
 
 After survey completes, run /idea-generation again.
 ```
@@ -101,21 +96,21 @@ Arguments:
 
 2. **Clone 3-5 reference repos:**
 ```bash
-mkdir -p $WORKSPACE/repos
-git clone --depth 1 {repo_url} $WORKSPACE/repos/{name}
+mkdir -p $W/repos
+git clone --depth 1 {repo_url} $W/repos/{name}
 ```
 
 3. **Download paper sources:**
 ```bash
-mkdir -p $WORKSPACE/papers/{arxiv_id}
-curl -L "https://arxiv.org/src/{arxiv_id}" | tar -xz -C $WORKSPACE/papers/{arxiv_id}
+mkdir -p $W/papers/{arxiv_id}
+curl -L "https://arxiv.org/src/{arxiv_id}" | tar -xz -C $W/papers/{arxiv_id}
 ```
 
 ---
 
 ## Step 4: Analyze Literature
 
-**Prerequisites:** At least 5 papers in `$WORKSPACE/papers/`
+**Prerequisites:** At least 5 papers in `$W/papers/`
 
 ### 4.1 Read Papers
 
@@ -135,7 +130,7 @@ Look for:
 - Scalability issues
 - Assumptions that could be relaxed
 
-Document gaps in `$WORKSPACE/ideas/gaps.md`:
+Document gaps in `$W/ideas/gaps.md`:
 ```markdown
 # Research Gaps Identified
 
@@ -151,7 +146,7 @@ Document gaps in `$WORKSPACE/ideas/gaps.md`:
 
 ## Step 5: Generate 5 Ideas
 
-Create `$WORKSPACE/ideas/idea_1.md` through `idea_5.md` using template in `references/idea-template.md`.
+Create `$W/ideas/idea_1.md` through `idea_5.md` using template in `references/idea-template.md`.
 
 **Requirements:**
 - Each idea cites ≥2 papers by arXiv ID
@@ -180,7 +175,7 @@ Create `$WORKSPACE/ideas/idea_1.md` through `idea_5.md` using template in `refer
 
 ### 6.2 Enhance Selected Idea
 
-Create `$WORKSPACE/ideas/selected_idea.md` with:
+Create `$W/ideas/selected_idea.md` with:
 - Detailed math (loss functions, gradients)
 - Architecture choices
 - Hyperparameters
@@ -210,13 +205,13 @@ Map idea concepts to reference implementations.
 
 See `references/code-mapping.md` for template.
 
-**Output:** `$WORKSPACE/ideas/implementation_report.md`
+**Output:** `$W/ideas/implementation_report.md`
 
 ---
 
 ## Step 8: Summary
 
-Create `$WORKSPACE/ideas/summary.md`:
+Create `$W/ideas/summary.md`:
 - All 5 ideas with scores
 - Selected idea details
 - Next steps: `/research-pipeline` to implement
@@ -236,6 +231,6 @@ Create `$WORKSPACE/ideas/summary.md`:
 
 ## Integration
 
-- **Before:** `/literature-survey` to collect papers
+- **Before:** `/research-collect` to collect papers
 - **After:** `/research-pipeline` to implement selected idea
 - **Alternative:** `/write-review-paper` to write survey instead

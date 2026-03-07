@@ -14,9 +14,9 @@ export const ArxivDownloadSchema = Type.Object({
   arxiv_ids: Type.Array(Type.String(), {
     description: "List of arXiv IDs to download (e.g. ['2401.12345', '2312.00001']).",
   }),
-  output_dir: Type.String({
-    description: "Directory to save files. MUST be an absolute path.",
-  }),
+  output_dir: Type.Optional(Type.String({
+    description: "Directory to save files. Defaults to 'papers/' relative to cwd. Can be relative or absolute.",
+  })),
 });
 
 type DownloadResult = {
@@ -156,22 +156,20 @@ export function createArxivDownloadTool() {
   return {
     label: "ArXiv Download",
     name: "arxiv_download",
-    description: "Download arXiv papers by ID. Downloads .tex source (with PDF fallback). Requires explicit output_dir (absolute path).",
+    description: "Download arXiv papers by ID. Downloads .tex source (with PDF fallback). output_dir defaults to 'papers/' if omitted.",
     parameters: ArxivDownloadSchema,
     execute: async (_toolCallId: string, rawArgs: unknown) => {
       const params = rawArgs as Record<string, unknown>;
       const arxivIds = readArrayParam(params, "arxiv_ids");
-      const outputDir = readStringParam(params, "output_dir", { required: true })!
+      const outputDir = readStringParam(params, "output_dir") ?? "papers";
 
       if (arxivIds.length === 0) {
         return Result.err("invalid_params", "arxiv_ids must be a non-empty array");
       }
 
-      if (!path.isAbsolute(outputDir)) {
-        return Result.err("invalid_params", `output_dir must be an absolute path, got: ${outputDir}`);
-      }
+      const resolvedOutputDir = path.resolve(outputDir);
 
-      await fs.promises.mkdir(outputDir, { recursive: true });
+      await fs.promises.mkdir(resolvedOutputDir, { recursive: true });
 
       const logger = { debug: (msg: string) => console.log(`[arxiv-download] ${msg}`) };
       const downloads: Array<{
@@ -193,7 +191,7 @@ export function createArxivDownloadTool() {
         }
 
         // Always try .tex first, fallback to PDF automatically
-        const result = await downloadTexSource(arxivId, outputDir, logger);
+        const result = await downloadTexSource(arxivId, resolvedOutputDir, logger);
 
         downloads.push({
           arxiv_id: arxivId,
@@ -210,7 +208,7 @@ export function createArxivDownloadTool() {
       const failed = downloads.filter((d) => !d.success).length;
 
       return Result.ok({
-        output_dir: outputDir,
+        output_dir: resolvedOutputDir,
         total: arxivIds.length,
         successful,
         failed,

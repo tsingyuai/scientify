@@ -128,20 +128,17 @@ scientify/
 │       ├── github-search-tool.ts   # GitHub 搜索工具
 │       └── paper-browser.ts        # 论文分页浏览工具
 ├── skills/
-│   ├── _shared/
-│   │   └── workspace-spec.md       # 所有 skill 共享的工作空间规范
 │   ├── idea-generation/
 │   │   ├── SKILL.md
 │   │   └── references/idea-template.md
-│   ├── literature-survey/SKILL.md  # 文献搜索 → 筛选 → 下载 → 聚类
+│   ├── research-collect/SKILL.md  # 文献搜索 → 筛选 → 下载 → 聚类
 │   ├── research-pipeline/SKILL.md  # 编排器，通过 sessions_spawn 调度以下 5 个 skill
 │   ├── research-survey/SKILL.md    # 深度论文分析 + 方法对比
 │   ├── research-plan/SKILL.md      # 四部分实现计划
 │   ├── research-implement/SKILL.md # 代码实现 + 2 epoch 验证
 │   ├── research-review/SKILL.md    # 审查 + 迭代修复（最多 3 轮）
 │   ├── research-experiment/SKILL.md # 完整训练 + 消融实验
-│   ├── write-review-paper/SKILL.md
-│   └── install-scientify/SKILL.md  # 安装入口（不在 plugin.json 中注册）
+│   └── write-review-paper/SKILL.md
 ├── .releaserc.json          # semantic-release 配置
 └── .github/
     └── workflows/release.yml  # 自动发布 CI/CD

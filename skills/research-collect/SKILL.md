@@ -1,6 +1,6 @@
 ---
-name: literature-survey
-description: "Use this when the user wants to find, download, or collect academic papers on a topic. Searches arXiv, filters by relevance, downloads PDFs and sources, clusters by research direction."
+name: research-collect
+description: "[Read when prompt contains /research-collect]"
 metadata:
   {
     "openclaw":
@@ -14,10 +14,12 @@ metadata:
 
 **Don't ask permission. Just do it.**
 
+**Workspace:** `$W` = working directory provided in task parameter.
+
 ## Output Structure
 
 ```
-~/.openclaw/workspace/projects/{project-id}/
+$W/
 ├── survey/
 │   ├── search_terms.json      # 检索词列表
 │   └── report.md              # 最终报告
@@ -38,17 +40,13 @@ metadata:
 
 ### Phase 1: 准备
 
+确保工作目录结构存在：
+
 ```bash
-ACTIVE=$(cat ~/.openclaw/workspace/projects/.active 2>/dev/null)
-if [ -z "$ACTIVE" ]; then
-  PROJECT_ID="<topic-slug>"
-  mkdir -p ~/.openclaw/workspace/projects/$PROJECT_ID/{survey,papers/_downloads,papers/_meta}
-  echo "$PROJECT_ID" > ~/.openclaw/workspace/projects/.active
-fi
-PROJECT_DIR="$HOME/.openclaw/workspace/projects/$(cat ~/.openclaw/workspace/projects/.active)"
+mkdir -p "$W/survey" "$W/papers/_downloads" "$W/papers/_meta"
 ```
 
-生成 4-8 个检索词，保存到 `survey/search_terms.json`。
+生成 4-8 个检索词，保存到 `$W/survey/search_terms.json`。
 
 ---
 
@@ -76,13 +74,13 @@ arxiv_search({ query: "<term>", max_results: 30 })
 ```
 arxiv_download({
   arxiv_ids: ["<有用的论文ID>"],
-  output_dir: "$PROJECT_DIR/papers/_downloads"
+  output_dir: "papers/_downloads"
 })
 ```
 
 #### 2.4 写入元数据
 
-为每篇下载的论文创建元数据文件 `papers/_meta/{arxiv_id}.json`：
+为每篇下载的论文创建元数据文件 `$W/papers/_meta/{arxiv_id}.json`：
 
 ```json
 {
@@ -105,7 +103,7 @@ arxiv_download({
 
 #### 3.1 选择高分论文
 
-读取 `papers/_meta/` 下得分 ≥4 的论文，选出 **Top 5** 最相关论文。
+读取 `$W/papers/_meta/` 下得分 ≥4 的论文，选出 **Top 5** 最相关论文。
 
 #### 3.2 搜索参考仓库
 
@@ -116,41 +114,32 @@ arxiv_download({
 
 使用 `github_search` 工具：
 ```javascript
-// 示例：
 github_search({
   query: "{paper_title} implementation",
   max_results: 10,
   sort: "stars",
-  language: "python"  // 可选：根据论文领域选择语言
-})
-
-// 如果有具体方法名：
-github_search({
-  query: "{method_name} {author_last_name}",
-  max_results: 5
+  language: "python"
 })
 ```
-
-**提示**：如果需要 GitHub API 高频率限制，设置环境变量 `GITHUB_TOKEN`。
 
 #### 3.3 筛选与 clone
 
 对搜索到的仓库，评估：
 - Star 数（建议 >100）
 - 代码质量（有 README、有 requirements.txt、代码结构清晰）
-- 与论文的匹配度（README 中引用了论文 / 实现了论文中的方法）
+- 与论文的匹配度
 
-选择 **3-5 个**最相关的仓库，clone 到 `repos/`：
+选择 **3-5 个**最相关的仓库，clone 到 `$W/repos/`：
 
 ```bash
-mkdir -p "$PROJECT_DIR/repos"
-cd "$PROJECT_DIR/repos"
+mkdir -p "$W/repos"
+cd "$W/repos"
 git clone --depth 1 <repo_url>
 ```
 
 #### 3.4 写入选择报告
 
-创建 `$PROJECT_DIR/prepare_res.md`：
+创建 `$W/prepare_res.md`：
 
 ```markdown
 # 参考仓库选择
@@ -179,7 +168,7 @@ git clone --depth 1 <repo_url>
 #### 4.1 读取所有元数据
 
 ```bash
-ls $PROJECT_DIR/papers/_meta/
+ls $W/papers/_meta/
 ```
 
 读取所有 `.json` 文件，汇总论文列表。
@@ -191,15 +180,15 @@ ls $PROJECT_DIR/papers/_meta/
 #### 4.3 创建文件夹并移动
 
 ```bash
-mkdir -p "$PROJECT_DIR/papers/data-driven"
-mv "$PROJECT_DIR/papers/_downloads/2401.12345" "$PROJECT_DIR/papers/data-driven/"
+mkdir -p "$W/papers/data-driven"
+mv "$W/papers/_downloads/2401.12345" "$W/papers/data-driven/"
 ```
 
 ---
 
 ### Phase 5: 生成报告
 
-创建 `survey/report.md`：
+创建 `$W/survey/report.md`：
 - 调研概要（检索词数、论文数、方向数）
 - 各研究方向概述
 - Top 10 论文
@@ -222,3 +211,4 @@ mv "$PROJECT_DIR/papers/_downloads/2401.12345" "$PROJECT_DIR/papers/data-driven/
 |------|---------|
 | `arxiv_search` | 搜索论文（无副作用） |
 | `arxiv_download` | 下载 .tex/.pdf（需绝对路径） |
+| `github_search` | 搜索参考仓库 |

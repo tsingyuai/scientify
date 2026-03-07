@@ -1,6 +1,6 @@
 ---
 name: write-review-paper
-description: "Use this when the user wants to write a literature review, survey paper, or thesis chapter from existing papers. Guides reading strategy, note-taking, synthesis, and academic writing. NOT for searching new papers (/literature-survey) or generating ideas (/idea-generation)."
+description: "Use this when the user wants to write a literature review, survey paper, or thesis chapter from existing papers. Guides reading strategy, note-taking, synthesis, and academic writing. NOT for searching new papers (/research-collect) or generating ideas (/idea-generation)."
 metadata:
   {
     "openclaw":
@@ -16,18 +16,18 @@ metadata:
 
 Guide for writing a structured literature review or survey paper from papers you've already collected. This skill helps with reading strategy, note organization, and academic writing.
 
-**Workspace:** See `../_shared/workspace-spec.md` for directory structure. Outputs go to `$WORKSPACE/review/`.
+**Workspace:** `$W` = working directory provided in task parameter. Outputs go to `$W/review/`.
 
 ## Prerequisites
 
 Before starting, ensure you have:
-1. Papers collected in `$WORKSPACE/papers/`
-2. Ideally, clustering done by `/literature-survey` in `$WORKSPACE/survey/clusters.json`
+1. Papers collected in `$W/papers/`
+2. Ideally, clustering done by `/research-collect` in `$W/survey/clusters.json`
 
-Check active project:
+Check workspace:
 ```bash
-cat ~/.openclaw/workspace/projects/.active 2>/dev/null
-ls $WORKSPACE/papers/
+ls $W/papers/
+ls $W/survey/ 2>/dev/null
 ```
 
 ---
@@ -44,7 +44,7 @@ Based on clusters from survey, prioritize reading:
 | P2 (重要) | 主要方法论、重要实验结果 | 读摘要+方法+实验 |
 | P3 (参考) | 辅助材料、边缘相关 | 仅读摘要 |
 
-Create `$WORKSPACE/review/reading_plan.md`:
+Create `$W/review/reading_plan.md`:
 
 ```markdown
 # Reading Plan
@@ -62,7 +62,7 @@ Create `$WORKSPACE/review/reading_plan.md`:
 
 ### 1.2 Reading Notes Template
 
-For each paper, create `$WORKSPACE/review/notes/{paper_id}.md` using template in `references/note-template.md`.
+For each paper, create `$W/review/notes/{paper_id}.md` using template in `references/note-template.md`.
 
 ---
 
@@ -70,7 +70,7 @@ For each paper, create `$WORKSPACE/review/notes/{paper_id}.md` using template in
 
 ### 2.1 Build Comparison Table
 
-Create `$WORKSPACE/review/comparison.md`:
+Create `$W/review/comparison.md`:
 
 ```markdown
 # Method Comparison
@@ -83,7 +83,7 @@ Create `$WORKSPACE/review/comparison.md`:
 
 ### 2.2 Timeline Analysis
 
-Create `$WORKSPACE/review/timeline.md`:
+Create `$W/review/timeline.md`:
 
 ```markdown
 # Research Timeline
@@ -106,7 +106,7 @@ Create `$WORKSPACE/review/timeline.md`:
 
 ### 2.3 Taxonomy Design
 
-Create `$WORKSPACE/review/taxonomy.md`:
+Create `$W/review/taxonomy.md`:
 
 ```markdown
 # Taxonomy of Approaches
@@ -140,7 +140,7 @@ Create `$WORKSPACE/review/taxonomy.md`:
 
 ### 3.1 Survey Paper Template
 
-Create `$WORKSPACE/review/draft.md` using template in `references/survey-template.md`.
+Create `$W/review/draft.md` using template in `references/survey-template.md`.
 
 Key sections: Abstract → Introduction → Background → Taxonomy → Comparison → Datasets → Future Directions → Conclusion
 
@@ -198,7 +198,7 @@ For a thesis chapter:
 ## Output Files
 
 ```
-$WORKSPACE/review/
+$W/review/
 ├── reading_plan.md       # 阅读计划
 ├── notes/                # 阅读笔记
 │   ├── {paper_id}.md
