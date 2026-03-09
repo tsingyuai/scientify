@@ -60,6 +60,7 @@ export type RecordResult = {
   topicKey: string;
   preferences: LightweightPreferences;
   memoryHints: TopicMemoryHints;
+  runId: string;
   recordedPapers: number;
   totalKnownPapers: number;
   pushedAtMs: number;
@@ -768,6 +769,7 @@ export async function recordIncrementalPush(args: {
     topicKey: topicState.topicKey,
     preferences: topicState.preferences,
     memoryHints: buildMemoryHints(memory),
+    runId: knowledgeCommitted.runId,
     recordedPapers,
     totalKnownPapers: Object.keys(topicState.pushedPapers).length,
     pushedAtMs: now,
@@ -869,6 +871,7 @@ export async function getIncrementalStateStatus(args: {
     lastStatus?: string;
     recentPapers: RecentPaperSummary[];
     knowledgeStateSummary?: KnowledgeStateSummary;
+    knowledgeStateMissingReason?: "project_unbound" | "project_or_stream_not_found";
     recentHypotheses: KnowledgeStateSummary["recentHypotheses"];
     recentChangeStats: KnowledgeStateSummary["recentChangeStats"];
     lastExplorationTrace: KnowledgeStateSummary["lastExplorationTrace"];
@@ -892,6 +895,12 @@ export async function getIncrementalStateStatus(args: {
   const lastPushedAtMs = excludePaperIds.length
     ? topicState.pushedPapers[excludePaperIds[0]]?.lastPushedAtMs
     : undefined;
+  const knowledgeStateMissingReason =
+    knowledgeSummaryResult === undefined
+      ? args.projectId || topicState.lastProjectId
+        ? "project_or_stream_not_found"
+        : "project_unbound"
+      : undefined;
 
   return {
     scope: topicState.scope,
@@ -906,6 +915,7 @@ export async function getIncrementalStateStatus(args: {
     ...(topicState.lastStatus ? { lastStatus: topicState.lastStatus } : {}),
     recentPapers: recentPapersByRecency(topicState.pushedPapers, 10),
     ...(knowledgeSummaryResult ? { knowledgeStateSummary: knowledgeSummaryResult.summary } : {}),
+    ...(knowledgeStateMissingReason ? { knowledgeStateMissingReason } : {}),
     recentHypotheses: knowledgeSummaryResult?.summary.recentHypotheses ?? [],
     recentChangeStats: knowledgeSummaryResult?.summary.recentChangeStats ?? [],
     lastExplorationTrace: knowledgeSummaryResult?.summary.lastExplorationTrace ?? [],

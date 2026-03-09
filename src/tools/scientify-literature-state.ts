@@ -152,6 +152,12 @@ const KnowledgeRunLogSchema = Type.Object({
   error: Type.Optional(Type.String({ description: "Optional run error text." })),
   degraded: Type.Optional(Type.Boolean({ description: "Whether this run used degraded behavior." })),
   notes: Type.Optional(Type.String({ description: "Optional extra notes." })),
+  required_core_papers: Type.Optional(
+    Type.Number({ description: "Optional hard requirement for minimum core papers in this run." }),
+  ),
+  required_full_text_coverage_pct: Type.Optional(
+    Type.Number({ description: "Optional hard requirement for minimum full-text coverage percentage." }),
+  ),
   temp_full_text_dir: Type.Optional(Type.String({ description: "Temporary local directory for full-text files." })),
   temp_files_downloaded: Type.Optional(Type.Number({ description: "Number of temporary full-text files downloaded." })),
   temp_cleanup_status: Type.Optional(
@@ -779,6 +785,17 @@ function readKnowledgeStatePayload(params: Record<string, unknown>): KnowledgeSt
           const error = typeof runLogRecord.error === "string" ? runLogRecord.error.trim() : undefined;
           const degraded = runLogRecord.degraded === true;
           const notes = typeof runLogRecord.notes === "string" ? runLogRecord.notes.trim() : undefined;
+          const requiredCorePapersRaw = runLogRecord.required_core_papers ?? runLogRecord.requiredCorePapers;
+          const requiredCorePapers =
+            typeof requiredCorePapersRaw === "number" && Number.isFinite(requiredCorePapersRaw)
+              ? Math.max(0, Math.floor(requiredCorePapersRaw))
+              : undefined;
+          const requiredFullTextCoveragePctRaw =
+            runLogRecord.required_full_text_coverage_pct ?? runLogRecord.requiredFullTextCoveragePct;
+          const requiredFullTextCoveragePct =
+            typeof requiredFullTextCoveragePctRaw === "number" && Number.isFinite(requiredFullTextCoveragePctRaw)
+              ? Math.max(0, Math.min(100, Number(requiredFullTextCoveragePctRaw.toFixed(2))))
+              : undefined;
           const tempFullTextDir =
             typeof (runLogRecord.temp_full_text_dir ?? runLogRecord.tempFullTextDir) === "string"
               ? String(runLogRecord.temp_full_text_dir ?? runLogRecord.tempFullTextDir).trim()
@@ -816,6 +833,8 @@ function readKnowledgeStatePayload(params: Record<string, unknown>): KnowledgeSt
             !error &&
             !degraded &&
             !notes &&
+            requiredCorePapers === undefined &&
+            requiredFullTextCoveragePct === undefined &&
             !tempFullTextDir &&
             tempFilesDownloaded === undefined &&
             !tempCleanupStatus &&
@@ -831,6 +850,8 @@ function readKnowledgeStatePayload(params: Record<string, unknown>): KnowledgeSt
             ...(error ? { error } : {}),
             ...(degraded ? { degraded } : {}),
             ...(notes ? { notes } : {}),
+            ...(requiredCorePapers !== undefined ? { requiredCorePapers } : {}),
+            ...(requiredFullTextCoveragePct !== undefined ? { requiredFullTextCoveragePct } : {}),
             ...(tempFullTextDir ? { tempFullTextDir } : {}),
             ...(tempFilesDownloaded !== undefined ? { tempFilesDownloaded } : {}),
             ...(tempCleanupStatus ? { tempCleanupStatus } : {}),
@@ -967,6 +988,7 @@ export function createScientifyLiteratureStateTool() {
             scope: recorded.scope,
             topic: recorded.topic,
             topic_key: recorded.topicKey,
+            run_id: recorded.runId,
             preferences: {
               max_papers: recorded.preferences.maxPapers,
               recency_days: recorded.preferences.recencyDays,
@@ -1001,9 +1023,22 @@ export function createScientifyLiteratureStateTool() {
                     citation_error_rate_pct: recorded.knowledgeStateSummary.qualityGate.citationErrorRatePct,
                     reasons: recorded.knowledgeStateSummary.qualityGate.reasons,
                   },
+                  hypothesis_gate: {
+                    accepted: recorded.knowledgeStateSummary.hypothesisGate.accepted,
+                    rejected: recorded.knowledgeStateSummary.hypothesisGate.rejected,
+                    rejection_reasons: recorded.knowledgeStateSummary.hypothesisGate.rejectionReasons,
+                  },
                   unread_core_paper_ids: recorded.knowledgeStateSummary.unreadCorePaperIds,
                   last_run_at_ms: recorded.knowledgeStateSummary.lastRunAtMs ?? null,
                   last_status: recorded.knowledgeStateSummary.lastStatus ?? null,
+                  last_reflection_tasks: recorded.knowledgeStateSummary.lastReflectionTasks.map((task) => ({
+                    id: task.id,
+                    trigger: task.trigger,
+                    reason: task.reason,
+                    query: task.query,
+                    priority: task.priority,
+                    status: task.status,
+                  })),
                   recent_papers: recorded.knowledgeStateSummary.recentPapers.map(serializeKnowledgePaper),
                 }
               : null,
@@ -1070,6 +1105,7 @@ export function createScientifyLiteratureStateTool() {
             scope: status.scope,
             topic: status.topic,
             topic_key: status.topicKey,
+            latest_run_id: status.recentChangeStats[0]?.runId ?? null,
             preferences: {
               max_papers: status.preferences.maxPapers,
               recency_days: status.preferences.recencyDays,
@@ -1088,6 +1124,9 @@ export function createScientifyLiteratureStateTool() {
             total_runs: status.totalRuns,
             last_status: status.lastStatus ?? null,
             last_pushed_at_ms: status.lastPushedAtMs ?? null,
+            knowledge_state_missing_reason: status.knowledgeStateSummary
+              ? null
+              : status.knowledgeStateMissingReason ?? "project_or_stream_not_found",
             knowledge_state_summary: status.knowledgeStateSummary
               ? {
                   project_id: status.knowledgeStateSummary.projectId,
@@ -1105,9 +1144,22 @@ export function createScientifyLiteratureStateTool() {
                     citation_error_rate_pct: status.knowledgeStateSummary.qualityGate.citationErrorRatePct,
                     reasons: status.knowledgeStateSummary.qualityGate.reasons,
                   },
+                  hypothesis_gate: {
+                    accepted: status.knowledgeStateSummary.hypothesisGate.accepted,
+                    rejected: status.knowledgeStateSummary.hypothesisGate.rejected,
+                    rejection_reasons: status.knowledgeStateSummary.hypothesisGate.rejectionReasons,
+                  },
                   unread_core_paper_ids: status.knowledgeStateSummary.unreadCorePaperIds,
                   last_run_at_ms: status.knowledgeStateSummary.lastRunAtMs ?? null,
                   last_status: status.knowledgeStateSummary.lastStatus ?? null,
+                  last_reflection_tasks: status.knowledgeStateSummary.lastReflectionTasks.map((task) => ({
+                    id: task.id,
+                    trigger: task.trigger,
+                    reason: task.reason,
+                    query: task.query,
+                    priority: task.priority,
+                    status: task.status,
+                  })),
                   recent_papers: status.knowledgeStateSummary.recentPapers.map(serializeKnowledgePaper),
                 }
               : null,

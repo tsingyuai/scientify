@@ -46,6 +46,21 @@ export type ExplorationTraceInput = {
   resultCount?: number;
 };
 
+export type ReflectionTaskInput = {
+  id: string;
+  trigger: "BRIDGE" | "TREND" | "CONTRADICTION" | "UNREAD_CORE";
+  reason: string;
+  query: string;
+  priority: "high" | "medium" | "low";
+  status: "planned" | "executed";
+};
+
+export type HypothesisGateSummary = {
+  accepted: number;
+  rejected: number;
+  rejectionReasons: string[];
+};
+
 export type KnowledgeChangeInput = {
   type: KnowledgeChangeType;
   statement: string;
@@ -81,6 +96,8 @@ export type KnowledgeRunLogInput = {
   error?: string;
   degraded?: boolean;
   notes?: string;
+  requiredCorePapers?: number;
+  requiredFullTextCoveragePct?: number;
   tempFullTextDir?: string;
   tempFilesDownloaded?: number;
   tempCleanupStatus?: "done" | "partial" | "failed" | "not_needed";
@@ -139,6 +156,8 @@ export type KnowledgeStateSummary = {
   recentHypotheses: RecentHypothesisSummary[];
   recentChangeStats: RecentChangeStat[];
   lastExplorationTrace: ExplorationTraceInput[];
+  lastReflectionTasks: ReflectionTaskInput[];
+  hypothesisGate: HypothesisGateSummary;
 };
 
 export type CommitKnowledgeRunInput = {
@@ -180,6 +199,8 @@ export type KnowledgeStreamState = {
   recentHypotheses: RecentHypothesisSummary[];
   recentChangeStats: RecentChangeStat[];
   lastExplorationTrace: ExplorationTraceInput[];
+  lastReflectionTasks: ReflectionTaskInput[];
+  lastHypothesisGate: HypothesisGateSummary;
 };
 
 export type KnowledgeStateRoot = {

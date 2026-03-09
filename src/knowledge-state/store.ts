@@ -11,6 +11,7 @@ import {
   renderKnowledgeIndexMarkdown,
   renderPaperNoteHeaderMarkdown,
   renderPaperNoteRunMarkdown,
+  renderReflectionLogMarkdown,
   renderTopicUpdateMarkdown,
   slugifyTopic,
 } from "./render.js";
@@ -18,6 +19,7 @@ import { resolveProjectContext } from "./project.js";
 import type {
   CommitKnowledgeRunInput,
   ExplorationTraceInput,
+  HypothesisGateSummary,
   KnowledgeChangeInput,
   KnowledgeHypothesisInput,
   KnowledgePaperInput,
@@ -27,6 +29,7 @@ import type {
   KnowledgeUpdateInput,
   RecentChangeStat,
   RecentHypothesisSummary,
+  ReflectionTaskInput,
 } from "./types.js";
 
 const STATE_VERSION = 1 as const;
@@ -34,11 +37,16 @@ const MAX_RECENT_RUN_IDS = 200;
 const MAX_RECENT_HYPOTHESES = 50;
 const MAX_RECENT_CHANGE_STATS = 30;
 const MAX_LAST_TRACE = 20;
+const MAX_LAST_REFLECTION_TASKS = 20;
 const MAX_RECENT_PAPERS = 50;
 const MAX_PAPER_NOTES = 800;
+const MAX_HYPOTHESIS_REJECTION_REASONS = 24;
 const MIN_CORE_FULLTEXT_COVERAGE = 0.8;
 const MIN_EVIDENCE_BINDING_RATE = 0.9;
 const MAX_CITATION_ERROR_RATE = 0.02;
+const MIN_HYPOTHESIS_EVIDENCE = 2;
+const MIN_HYPOTHESIS_DEPENDENCY_STEPS = 2;
+const MIN_HYPOTHESIS_STATEMENT_CHARS = 48;
 
 function defaultQualityGateState(): {
   passed: boolean;
@@ -53,6 +61,14 @@ function defaultQualityGateState(): {
     evidenceBindingRatePct: 0,
     citationErrorRatePct: 0,
     reasons: ["quality gate not evaluated"],
+  };
+}
+
+function defaultHypothesisGateState(): HypothesisGateSummary {
+  return {
+    accepted: 0,
+    rejected: 0,
+    rejectionReasons: [],
   };
 }
 
@@ -236,6 +252,42 @@ async function loadState(projectPath: string): Promise<KnowledgeStateRoot> {
               .map(normalizeTrace)
               .filter((item): item is ExplorationTraceInput => Boolean(item))
           : [],
+        lastReflectionTasks: Array.isArray(rawStream.lastReflectionTasks)
+          ? rawStream.lastReflectionTasks
+              .filter((item): item is ReflectionTaskInput => !!item && typeof item === "object")
+              .map((item) => ({
+                id: sanitizeId(item.id ?? "task"),
+                trigger: ["BRIDGE", "TREND", "CONTRADICTION", "UNREAD_CORE"].includes(item.trigger)
+                  ? item.trigger
+                  : "TREND",
+                reason: normalizeText(item.reason ?? ""),
+                query: normalizeText(item.query ?? ""),
+                priority: ["high", "medium", "low"].includes(item.priority) ? item.priority : "medium",
+                status: (item.status === "executed" ? "executed" : "planned") as "planned" | "executed",
+              }))
+              .filter((item) => item.reason.length > 0 && item.query.length > 0)
+          : [],
+        lastHypothesisGate:
+          rawStream.lastHypothesisGate &&
+          typeof rawStream.lastHypothesisGate === "object" &&
+          !Array.isArray(rawStream.lastHypothesisGate)
+            ? {
+                accepted:
+                  typeof rawStream.lastHypothesisGate.accepted === "number"
+                    ? Math.max(0, Math.floor(rawStream.lastHypothesisGate.accepted))
+                    : 0,
+                rejected:
+                  typeof rawStream.lastHypothesisGate.rejected === "number"
+                    ? Math.max(0, Math.floor(rawStream.lastHypothesisGate.rejected))
+                    : 0,
+                rejectionReasons: Array.isArray(rawStream.lastHypothesisGate.rejectionReasons)
+                  ? rawStream.lastHypothesisGate.rejectionReasons
+                      .filter((item): item is string => typeof item === "string")
+                      .map((item) => normalizeText(item))
+                      .filter((item) => item.length > 0)
+                  : [],
+              }
+            : defaultHypothesisGateState(),
       };
     }
 
@@ -522,9 +574,14 @@ function dedupeText(items: string[]): string[] {
 function applyQualityGates(args: {
   corePapers: KnowledgePaperInput[];
   allRunPapers: KnowledgePaperInput[];
+  explorationTrace: ExplorationTraceInput[];
+  reflectionTasks: ReflectionTaskInput[];
   knowledgeChanges: KnowledgeChangeInput[];
   knowledgeUpdates: KnowledgeUpdateInput[];
   hypotheses: KnowledgeHypothesisInput[];
+  hypothesisGate: HypothesisGateSummary;
+  requiredCorePapers?: number;
+  requiredFullTextCoveragePct?: number;
 }): {
   qualityGate: {
     passed: boolean;
@@ -619,9 +676,27 @@ function applyQualityGates(args: {
   }
 
   const reasons: string[] = [];
+  if (
+    typeof args.requiredCorePapers === "number" &&
+    Number.isFinite(args.requiredCorePapers) &&
+    args.requiredCorePapers > 0 &&
+    coreCount < args.requiredCorePapers
+  ) {
+    reasons.push(`core_paper_count_below_required(${coreCount} < ${Math.floor(args.requiredCorePapers)})`);
+  }
   if (fullTextCoverage < MIN_CORE_FULLTEXT_COVERAGE) {
     reasons.push(
       `core_fulltext_coverage_below_threshold(${fullTextCoveragePct}% < ${Number((MIN_CORE_FULLTEXT_COVERAGE * 100).toFixed(0))}%)`,
+    );
+  }
+  if (
+    typeof args.requiredFullTextCoveragePct === "number" &&
+    Number.isFinite(args.requiredFullTextCoveragePct) &&
+    args.requiredFullTextCoveragePct > 0 &&
+    fullTextCoveragePct < args.requiredFullTextCoveragePct
+  ) {
+    reasons.push(
+      `core_fulltext_coverage_below_required(${fullTextCoveragePct}% < ${Number(args.requiredFullTextCoveragePct.toFixed(2))}%)`,
     );
   }
   if (evidenceBindingRate < MIN_EVIDENCE_BINDING_RATE) {
@@ -633,6 +708,14 @@ function applyQualityGates(args: {
     reasons.push(
       `citation_error_rate_above_threshold(${citationErrorRatePct}% >= ${Number((MAX_CITATION_ERROR_RATE * 100).toFixed(0))}%)`,
     );
+  }
+  const bridgeChangeCount = args.knowledgeChanges.filter((item) => item.type === "BRIDGE").length;
+  const executedReflectionCount = args.reflectionTasks.filter((task) => task.status === "executed").length;
+  if (bridgeChangeCount > 0 && executedReflectionCount === 0) {
+    reasons.push(`reflection_missing_for_bridge(bridge_count=${bridgeChangeCount})`);
+  }
+  if (args.hypothesisGate.rejected > 0 && args.hypothesisGate.accepted === 0 && args.hypotheses.length > 0) {
+    reasons.push(`hypothesis_gate_rejected_all(${args.hypothesisGate.rejected})`);
   }
   if (downgradedHighConfidenceCount > 0) {
     reasons.push(`high_confidence_downgraded(${downgradedHighConfidenceCount})`);
@@ -775,6 +858,8 @@ function toSummary(stream: KnowledgeStreamState): KnowledgeStateSummary {
     recentHypotheses: stream.recentHypotheses,
     recentChangeStats: stream.recentChangeStats,
     lastExplorationTrace: stream.lastExplorationTrace,
+    lastReflectionTasks: stream.lastReflectionTasks,
+    hypothesisGate: stream.lastHypothesisGate,
   };
 }
 
@@ -798,6 +883,272 @@ function countChangeStats(day: string, runId: string, changes: KnowledgeChangeIn
     confirmCount,
     reviseCount,
     bridgeCount,
+  };
+}
+
+function tokenizeForQuery(raw: string): string[] {
+  return normalizeText(raw)
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff\s_-]+/g, " ")
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 3);
+}
+
+function uniqueText(values: string[]): string[] {
+  return [...new Set(values.map((item) => normalizeText(item)).filter((item) => item.length > 0))];
+}
+
+function buildReflectionQuery(topic: string, statement: string, fallbackHint: string): string {
+  const topicTokens = tokenizeForQuery(topic).slice(0, 4);
+  const stmtTokens = tokenizeForQuery(statement).slice(0, 6);
+  const merged = uniqueText([...topicTokens, ...stmtTokens]);
+  if (merged.length === 0) return `${topic} ${fallbackHint}`.trim();
+  return merged.join(" ");
+}
+
+function queryMatchesTrace(query: string, trace: ExplorationTraceInput[]): boolean {
+  const tokens = tokenizeForQuery(query).slice(0, 4);
+  if (tokens.length === 0) return false;
+  return trace.some((step) => {
+    const hay = normalizeText(step.query).toLowerCase();
+    let hit = 0;
+    for (const token of tokens) {
+      if (hay.includes(token)) hit += 1;
+      if (hit >= Math.min(2, tokens.length)) return true;
+    }
+    return false;
+  });
+}
+
+function deriveReflectionTasks(args: {
+  topic: string;
+  changes: KnowledgeChangeInput[];
+  trace: ExplorationTraceInput[];
+  corePapers: KnowledgePaperInput[];
+}): ReflectionTaskInput[] {
+  const tasks: ReflectionTaskInput[] = [];
+  const bridge = args.changes.filter((item) => item.type === "BRIDGE");
+  const revise = args.changes.filter((item) => item.type === "REVISE");
+  const confirm = args.changes.filter((item) => item.type === "CONFIRM");
+  const newly = args.changes.filter((item) => item.type === "NEW");
+
+  for (const [idx, change] of bridge.slice(0, 3).entries()) {
+    const query = buildReflectionQuery(args.topic, change.statement, "cross-domain mechanism");
+    tasks.push({
+      id: sanitizeId(`bridge-${idx + 1}-${query}`),
+      trigger: "BRIDGE",
+      reason: `Bridge signal requires cross-domain follow-up: ${change.statement}`,
+      query,
+      priority: "high",
+      status: queryMatchesTrace(query, args.trace) ? "executed" : "planned",
+    });
+  }
+
+  if (newly.length >= 3) {
+    const query = buildReflectionQuery(args.topic, newly.map((item) => item.statement).join(" "), "trend synthesis");
+    tasks.push({
+      id: sanitizeId(`trend-${query}`),
+      trigger: "TREND",
+      reason: `New findings accumulated (${newly.length}); run trend synthesis and gap scan.`,
+      query,
+      priority: "medium",
+      status: queryMatchesTrace(query, args.trace) ? "executed" : "planned",
+    });
+  }
+
+  if (revise.length > 0 && confirm.length > 0) {
+    const query = buildReflectionQuery(
+      args.topic,
+      `${revise[0]?.statement ?? ""} ${confirm[0]?.statement ?? ""}`,
+      "contradiction resolution",
+    );
+    tasks.push({
+      id: sanitizeId(`contradiction-${query}`),
+      trigger: "CONTRADICTION",
+      reason: `Revise and confirm signals co-exist; verify contradiction boundaries.`,
+      query,
+      priority: "high",
+      status: queryMatchesTrace(query, args.trace) ? "executed" : "planned",
+    });
+  }
+
+  const unreadCore = args.corePapers.filter((paper) => !isFullTextRead(paper));
+  if (unreadCore.length > 0) {
+    const topId = unreadCore[0]?.id ?? unreadCore[0]?.title ?? "core-paper";
+    const query = buildReflectionQuery(args.topic, String(topId), "full text retrieval");
+    tasks.push({
+      id: sanitizeId(`unread-core-${query}`),
+      trigger: "UNREAD_CORE",
+      reason: `${unreadCore.length} core paper(s) were not fully read; prioritize retrieval and verification.`,
+      query,
+      priority: "medium",
+      status: queryMatchesTrace(query, args.trace) ? "executed" : "planned",
+    });
+  }
+
+  const dedup = new Map<string, ReflectionTaskInput>();
+  for (const task of tasks) {
+    const key = normalizeText(task.query).toLowerCase();
+    if (!key) continue;
+    const existing = dedup.get(key);
+    if (!existing) {
+      dedup.set(key, task);
+      continue;
+    }
+    // Keep higher priority / executed status when duplicates collide.
+    const priorityRank = { high: 3, medium: 2, low: 1 } as const;
+    const pick =
+      (existing.status !== "executed" && task.status === "executed") ||
+      priorityRank[task.priority] > priorityRank[existing.priority]
+        ? task
+        : existing;
+    dedup.set(key, pick);
+  }
+  return [...dedup.values()].slice(0, MAX_LAST_REFLECTION_TASKS);
+}
+
+function sanitizeKnowledgeChanges(args: {
+  changes: KnowledgeChangeInput[];
+  allRunPapers: KnowledgePaperInput[];
+}): {
+  changes: KnowledgeChangeInput[];
+  droppedBridgeCount: number;
+} {
+  if (args.changes.length === 0) {
+    return {
+      changes: [],
+      droppedBridgeCount: 0,
+    };
+  }
+
+  const paperLookup = buildPaperLookup(args.allRunPapers);
+  const next: KnowledgeChangeInput[] = [];
+  let droppedBridgeCount = 0;
+
+  for (const change of args.changes) {
+    if (change.type !== "BRIDGE") {
+      next.push(change);
+      continue;
+    }
+
+    const evidenceIds = (change.evidenceIds ?? []).map((id) => normalizedCitationToken(id)).filter((id) => id.length > 0);
+    if (evidenceIds.length === 0) {
+      droppedBridgeCount += 1;
+      continue;
+    }
+
+    let hasResolvedEvidence = false;
+    let hasFullTextEvidence = false;
+    for (const evidenceId of evidenceIds) {
+      const paper = paperLookup.get(evidenceId);
+      if (!paper) continue;
+      hasResolvedEvidence = true;
+      if (isFullTextRead(paper)) hasFullTextEvidence = true;
+    }
+
+    // Guard against speculative bridge signals with no grounded full-text evidence.
+    if (!hasResolvedEvidence || !hasFullTextEvidence) {
+      droppedBridgeCount += 1;
+      continue;
+    }
+
+    next.push(change);
+  }
+
+  return {
+    changes: next,
+    droppedBridgeCount,
+  };
+}
+
+function applyHypothesisGate(args: {
+  hypotheses: KnowledgeHypothesisInput[];
+  allRunPapers: KnowledgePaperInput[];
+  knowledgeChanges: KnowledgeChangeInput[];
+}): {
+  acceptedHypotheses: KnowledgeHypothesisInput[];
+  gate: HypothesisGateSummary;
+} {
+  const acceptedHypotheses: KnowledgeHypothesisInput[] = [];
+  const rejectionReasonSet = new Set<string>();
+  const paperLookup = buildPaperLookup(args.allRunPapers);
+  const changeCounts = {
+    NEW: args.knowledgeChanges.filter((item) => item.type === "NEW").length,
+    CONFIRM: args.knowledgeChanges.filter((item) => item.type === "CONFIRM").length,
+    REVISE: args.knowledgeChanges.filter((item) => item.type === "REVISE").length,
+    BRIDGE: args.knowledgeChanges.filter((item) => item.type === "BRIDGE").length,
+  };
+
+  for (const hypothesis of args.hypotheses) {
+    const reasons: string[] = [];
+    const statementLen = normalizeText(hypothesis.statement).length;
+    if (statementLen < MIN_HYPOTHESIS_STATEMENT_CHARS) {
+      reasons.push(`statement_too_short(${statementLen}<${MIN_HYPOTHESIS_STATEMENT_CHARS})`);
+    }
+
+    const evidenceIds = uniqueText((hypothesis.evidenceIds ?? []).map((id) => normalizedCitationToken(id)));
+    if (evidenceIds.length < MIN_HYPOTHESIS_EVIDENCE) {
+      reasons.push(`insufficient_evidence_ids(${evidenceIds.length}<${MIN_HYPOTHESIS_EVIDENCE})`);
+    }
+
+    let resolvedEvidence = 0;
+    let fullTextSupported = 0;
+    for (const evidenceId of evidenceIds) {
+      const paper = paperLookup.get(evidenceId);
+      if (!paper) continue;
+      resolvedEvidence += 1;
+      if (isFullTextRead(paper)) fullTextSupported += 1;
+    }
+    if (resolvedEvidence < evidenceIds.length) {
+      reasons.push(`unresolved_evidence_ids(${evidenceIds.length - resolvedEvidence})`);
+    }
+    if (fullTextSupported === 0) {
+      reasons.push("no_fulltext_backed_evidence");
+    }
+
+    const dependencyPathLength = hypothesis.dependencyPath?.length ?? 0;
+    if (dependencyPathLength < MIN_HYPOTHESIS_DEPENDENCY_STEPS) {
+      reasons.push(
+        `dependency_path_too_short(${dependencyPathLength}<${MIN_HYPOTHESIS_DEPENDENCY_STEPS})`,
+      );
+    }
+
+    const hasScore =
+      typeof hypothesis.novelty === "number" &&
+      typeof hypothesis.feasibility === "number" &&
+      typeof hypothesis.impact === "number";
+    if (!hasScore) {
+      reasons.push("missing_self_assessment_scores");
+    }
+
+    if (hypothesis.trigger === "BRIDGE" && changeCounts.BRIDGE === 0) {
+      reasons.push("trigger_bridge_without_bridge_change");
+    }
+    if (hypothesis.trigger === "TREND" && changeCounts.NEW < 2) {
+      reasons.push("trigger_trend_without_new_accumulation");
+    }
+    if (hypothesis.trigger === "CONTRADICTION" && !(changeCounts.REVISE > 0 && changeCounts.CONFIRM > 0)) {
+      reasons.push("trigger_contradiction_without_revise_confirm_pair");
+    }
+    if (hypothesis.trigger === "GAP" && changeCounts.NEW + changeCounts.REVISE < 2) {
+      reasons.push("trigger_gap_without_gap_signal");
+    }
+
+    if (reasons.length > 0) {
+      for (const reason of reasons) rejectionReasonSet.add(reason);
+      continue;
+    }
+    acceptedHypotheses.push(hypothesis);
+  }
+
+  return {
+    acceptedHypotheses,
+    gate: {
+      accepted: acceptedHypotheses.length,
+      rejected: Math.max(0, args.hypotheses.length - acceptedHypotheses.length),
+      rejectionReasons: [...rejectionReasonSet].slice(0, MAX_HYPOTHESIS_REJECTION_REASONS),
+    },
   };
 }
 
@@ -834,7 +1185,7 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
     const explorationTrace = (knowledgeState.explorationTrace ?? [])
       .map(normalizeTrace)
       .filter((item): item is ExplorationTraceInput => Boolean(item));
-    const knowledgeChanges = (knowledgeState.knowledgeChanges ?? [])
+    const submittedKnowledgeChanges = (knowledgeState.knowledgeChanges ?? [])
       .map(normalizeChange)
       .filter((item): item is KnowledgeChangeInput => Boolean(item));
     const knowledgeUpdates = (knowledgeState.knowledgeUpdates ?? [])
@@ -885,6 +1236,8 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
         recentHypotheses: [],
         recentChangeStats: [],
         lastExplorationTrace: [],
+        lastReflectionTasks: [],
+        lastHypothesisGate: defaultHypothesisGateState(),
       } as KnowledgeStreamState);
 
     const paperIds = mergePapers(corePapers, explorationPapers)
@@ -935,18 +1288,49 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
       }),
     );
 
+    const mergedRunPapers = mergePapers(corePapers, explorationPapers);
+    const changeSanitization = sanitizeKnowledgeChanges({
+      changes: submittedKnowledgeChanges,
+      allRunPapers: mergedRunPapers,
+    });
+    const knowledgeChanges = changeSanitization.changes;
     await appendMarkdown(
       path.join(dailyDir, `day-${dayKey}.md`),
       renderDailyChangesMarkdown({ now: nowIso, runId, topic: stream.topic, changes: knowledgeChanges }),
     );
 
-    const mergedRunPapers = mergePapers(corePapers, explorationPapers);
+    const reflectionTasks = deriveReflectionTasks({
+      topic: stream.topic,
+      changes: knowledgeChanges,
+      trace: explorationTrace,
+      corePapers,
+    });
+    await appendMarkdown(
+      path.join(logDir, `day-${dayKey}-reflection.md`),
+      renderReflectionLogMarkdown({
+        now: nowIso,
+        runId,
+        tasks: reflectionTasks,
+      }),
+    );
+    const submittedHypotheses = hypotheses;
+    const hypothesisEval = applyHypothesisGate({
+      hypotheses: submittedHypotheses,
+      allRunPapers: mergedRunPapers,
+      knowledgeChanges,
+    });
+    const acceptedHypotheses = hypothesisEval.acceptedHypotheses;
     const qualityEval = applyQualityGates({
       corePapers,
       allRunPapers: mergedRunPapers,
+      explorationTrace,
+      reflectionTasks,
       knowledgeChanges,
       knowledgeUpdates,
-      hypotheses,
+      hypotheses: acceptedHypotheses,
+      hypothesisGate: hypothesisEval.gate,
+      requiredCorePapers: input.knowledgeState?.runLog?.requiredCorePapers,
+      requiredFullTextCoveragePct: input.knowledgeState?.runLog?.requiredFullTextCoveragePct,
     });
     const requestedStatus = normalizeText(input.status ?? "ok");
     const qualitySensitiveStatus = requestedStatus === "ok" || requestedStatus === "fallback_representative";
@@ -998,7 +1382,7 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
     const recentHypothesisSummaries: RecentHypothesisSummary[] = [];
     let seq = stream.totalHypotheses;
     const dayToken = dayKey.replace(/-/g, "");
-    for (const hypothesis of hypotheses) {
+    for (const hypothesis of acceptedHypotheses) {
       seq += 1;
       const hypothesisId = hypothesis.id && hypothesis.id.length > 0 ? sanitizeId(hypothesis.id) : `hyp-${dayToken}-${String(seq).padStart(4, "0")}`;
       const file = `${hypothesisId}.md`;
@@ -1032,6 +1416,8 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
         notFullTextReadCount: fullTextStats.notFullTextReadCount,
         qualityGate: qualityEval.qualityGate,
         unreadCorePaperIds: qualityEval.unreadCorePaperIds,
+        reflectionTasks,
+        hypothesisGate: hypothesisEval.gate,
         lastStatus: effectiveStatus,
       }),
       "utf-8",
@@ -1049,6 +1435,8 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
     stream.lastQualityGate = qualityEval.qualityGate;
     stream.lastUnreadCorePaperIds = qualityEval.unreadCorePaperIds;
     stream.lastExplorationTrace = explorationTrace.slice(0, MAX_LAST_TRACE);
+    stream.lastReflectionTasks = reflectionTasks.slice(0, MAX_LAST_REFLECTION_TASKS);
+    stream.lastHypothesisGate = hypothesisEval.gate;
     stream.recentPapers = mergePapers(mergedRunPapers, stream.recentPapers).slice(0, MAX_RECENT_PAPERS);
     stream.recentRunIds = [runId, ...stream.recentRunIds.filter((id) => id !== runId)].slice(0, MAX_RECENT_RUN_IDS);
     stream.recentHypothesisIds = [
@@ -1073,9 +1461,14 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
         corePapers,
         explorationPapers,
         explorationTrace,
+        reflectionTasks,
+        submittedKnowledgeChanges,
         knowledgeChanges,
+        droppedBridgeCount: changeSanitization.droppedBridgeCount,
         knowledgeUpdates,
-        hypotheses,
+        hypotheses: acceptedHypotheses,
+        submittedHypotheses,
+        hypothesisGate: hypothesisEval.gate,
         paperNoteFiles: runPaperNoteFiles,
         quality: {
           fullTextReadCount: fullTextStats.fullTextReadCount,
@@ -1110,8 +1503,13 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
       qualityGate: qualityEval.qualityGate,
       unreadCorePaperIds: qualityEval.unreadCorePaperIds,
       downgradedHighConfidenceCount: qualityEval.downgradedHighConfidenceCount,
+      submittedChangeCount: submittedKnowledgeChanges.length,
       changeCount: knowledgeChanges.length,
+      droppedBridgeCount: changeSanitization.droppedBridgeCount,
       hypothesisCount: recentHypothesisSummaries.length,
+      submittedHypothesisCount: submittedHypotheses.length,
+      hypothesisGate: hypothesisEval.gate,
+      reflectionTasks,
       corePapers,
       explorationPapers,
       note: input.note,

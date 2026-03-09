@@ -1,9 +1,11 @@
 import type {
   ExplorationTraceInput,
+  HypothesisGateSummary,
   KnowledgeChangeInput,
   KnowledgeHypothesisInput,
   KnowledgePaperInput,
   KnowledgeUpdateInput,
+  ReflectionTaskInput,
 } from "./types.js";
 
 function normalizeText(raw: string): string {
@@ -250,6 +252,34 @@ export function renderExplorationLogMarkdown(args: {
   return lines.join("\n");
 }
 
+export function renderReflectionLogMarkdown(args: {
+  now: string;
+  runId: string;
+  tasks: ReflectionTaskInput[];
+}): string {
+  const lines = [
+    `## Run ${args.runId}`,
+    `- Time: ${args.now}`,
+    `- Reflection tasks: ${args.tasks.length}`,
+    "",
+    "### Tasks",
+    ...(args.tasks.length > 0
+      ? args.tasks.map((task, idx) => {
+          const attrs = [
+            `trigger=${task.trigger}`,
+            `priority=${task.priority}`,
+            `status=${task.status}`,
+            `query=${task.query}`,
+            `reason=${task.reason}`,
+          ];
+          return `${idx + 1}. ${attrs.join(" | ")}`;
+        })
+      : ["- (none)"]),
+    "",
+  ];
+  return lines.join("\n");
+}
+
 export function renderDailyChangesMarkdown(args: {
   now: string;
   runId: string;
@@ -381,6 +411,8 @@ export function renderKnowledgeIndexMarkdown(args: {
     reasons: string[];
   };
   unreadCorePaperIds: string[];
+  reflectionTasks: ReflectionTaskInput[];
+  hypothesisGate: HypothesisGateSummary;
   lastStatus?: string;
 }): string {
   const lines = [
@@ -398,12 +430,20 @@ export function renderKnowledgeIndexMarkdown(args: {
     `- Full-text coverage: ${args.qualityGate.fullTextCoveragePct}%`,
     `- Evidence binding rate: ${args.qualityGate.evidenceBindingRatePct}%`,
     `- Citation error rate: ${args.qualityGate.citationErrorRatePct}%`,
+    `- Reflection tasks (executed): ${args.reflectionTasks.filter((task) => task.status === "executed").length}`,
+    `- Hypothesis gate: accepted=${args.hypothesisGate.accepted}, rejected=${args.hypothesisGate.rejected}`,
     "",
     "## Quality Notes",
     ...(args.qualityGate.reasons.length > 0 ? args.qualityGate.reasons.map((reason) => `- ${reason}`) : ["- (none)"]),
     ...(args.unreadCorePaperIds.length > 0
       ? ["- unread_core_paper_ids: " + args.unreadCorePaperIds.join(", ")]
       : ["- unread_core_paper_ids: (none)"]),
+    ...(args.hypothesisGate.rejectionReasons.length > 0
+      ? args.hypothesisGate.rejectionReasons.map((reason) => `- hypothesis_gate_reason: ${reason}`)
+      : ["- hypothesis_gate_reason: (none)"]),
+    ...(args.reflectionTasks.length > 0
+      ? ["- reflection_tasks: " + args.reflectionTasks.map((task) => `${task.trigger}:${task.status}`).join(", ")]
+      : ["- reflection_tasks: (none)"]),
     "",
     "## Topics",
     ...(args.topicFiles.length > 0 ? args.topicFiles.map((file) => `- ${file}`) : ["- (none)"]),

@@ -86,6 +86,12 @@ export const ScientifyCronToolSchema = Type.Object({
       description: "If true, run in background without push delivery.",
     }),
   ),
+  run_now: Type.Optional(
+    Type.Boolean({
+      description:
+        "If true (upsert only), trigger one immediate run after job creation/update and return the run result handle.",
+    }),
+  ),
   job_id: Type.Optional(
     Type.String({
       description: "Specific job id to remove (only used when action=remove).",
@@ -154,6 +160,14 @@ function normalizeScope(raw: string | undefined): string {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
   return base || "global";
+}
+
+function parseJobIdFromResultText(text: string): string | undefined {
+  const fenced = text.match(/Job ID:\s*`([^`]+)`/i);
+  if (fenced?.[1]) return fenced[1].trim();
+  const plain = text.match(/Job ID:\s*([a-z0-9-]{8,})/i);
+  if (plain?.[1]) return plain[1].trim();
+  return undefined;
 }
 
 function buildToolContext(scope: string, args: string, commandBody: string): PluginCommandContext {
@@ -298,7 +312,38 @@ export function createScientifyCronTool(deps: CronToolDeps) {
             return Result.err("operation_failed", err);
           }
           const text = getResultText(res);
-          return Result.ok({ action, scope, result: text });
+          const jobId = parseJobIdFromResultText(text);
+          const runNow = readBooleanParam(params, "run_now");
+          if (runNow && jobId) {
+            let runRes = await deps.runtime.system.runCommandWithTimeout(
+              ["openclaw", "cron", "run", jobId, "--json"],
+              { timeoutMs: 120_000 },
+            );
+            if (
+              runRes.code !== 0 &&
+              /unknown option '--json'|unknown option \"--json\"|unknown option\s+--json/i.test(runRes.stderr || "")
+            ) {
+              runRes = await deps.runtime.system.runCommandWithTimeout(
+                ["openclaw", "cron", "run", jobId],
+                { timeoutMs: 120_000 },
+              );
+            }
+            if (runRes.code !== 0) {
+              return Result.err(
+                "operation_failed",
+                runRes.stderr || `cron run failed for job ${jobId}`,
+              );
+            }
+            return Result.ok({
+              action,
+              scope,
+              job_id: jobId,
+              run_now: true,
+              run_result: runRes.stdout.trim(),
+              result: text,
+            });
+          }
+          return Result.ok({ action, scope, ...(jobId ? { job_id: jobId } : {}), result: text });
         }
 
         if (action === "list") {
