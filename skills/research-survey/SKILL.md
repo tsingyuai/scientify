@@ -14,7 +14,7 @@ metadata:
 
 **Don't ask permission. Just do it.**
 
-**Workspace:** See `../_shared/workspace-spec.md`. Set `$W` to the active project directory.
+**Workspace:** `$W` = working directory provided in task parameter.
 
 ## Prerequisites
 
@@ -22,12 +22,12 @@ Read and verify these files exist before starting:
 
 | File | Source |
 |------|--------|
-| `$W/papers/_meta/*.json` | /literature-survey |
-| `$W/papers/_downloads/` or `$W/papers/{direction}/` | /literature-survey |
-| `$W/repos/` | /literature-survey Phase 3 |
-| `$W/prepare_res.md` | /literature-survey Phase 3 |
+| `$W/papers/_meta/*.json` | /research-collect |
+| `$W/papers/_downloads/` or `$W/papers/{direction}/` | /research-collect |
+| `$W/repos/` | /research-collect Phase 3 |
+| `$W/prepare_res.md` | /research-collect Phase 3 |
 
-**If papers are missing, STOP:** "需要先运行 /literature-survey 完成论文下载"
+**If papers are missing, STOP:** "需要先运行 /research-collect 完成论文下载"
 
 **Note:** 如果 `prepare_res.md` 中注明"无可用参考仓库"，代码映射步骤可跳过，但需在 survey_res.md 中标注。
 

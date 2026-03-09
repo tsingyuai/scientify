@@ -275,7 +275,7 @@ Or invoke a specific skill directly with a slash command:
 
 ```
 /research-pipeline
-/literature-survey
+/research-collect
 /idea-generation
 ```
 
@@ -310,7 +310,7 @@ You can also check status anytime with:
 | Skill | Slash Command | Description |
 |-------|---------------|-------------|
 | **research-pipeline** | `/research-pipeline` | Orchestrator. Spawns sub-agents for each phase, verifies outputs between steps. |
-| **literature-survey** | `/literature-survey` | Search arXiv → filter → download .tex sources → cluster → generate survey report. |
+| **research-collect** | `/research-collect` | Search arXiv → filter → download .tex sources → cluster → generate survey report. |
 | **research-survey** | `/research-survey` | Deep analysis of papers: extract formulas, map to code, produce method comparison table. |
 | **research-plan** | `/research-plan` | Create 4-part implementation plan (Dataset/Model/Training/Testing) from survey results. |
 | **research-implement** | `/research-implement` | Implement ML code from plan, run 2-epoch validation with `uv` venv isolation. |

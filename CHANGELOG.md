@@ -1,3 +1,9 @@
+## [1.12.0](https://github.com/tsingyuai/scientify/compare/v1.11.0...v1.12.0) (2026-03-07)
+
+### Features
+
+* add metabolism skills, CLI commands, and cron-skill injection ([fca57b4](https://github.com/tsingyuai/scientify/commit/fca57b4701b7f2db56fcd7199e25eb590e8ba30d))
+
 ## [1.11.0](https://github.com/tsingyuai/scientify/compare/v1.10.3...v1.11.0) (2026-03-06)
 
 ### Features

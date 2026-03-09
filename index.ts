@@ -32,6 +32,9 @@ import {
   createScientifyUsageCleanupHook,
   createScientifyUsageTrackerHook,
 } from "./src/hooks/scientify-signature.js";
+import { createCronSkillInjectionHook } from "./src/hooks/cron-skill-inject.js";
+import { registerResearchCli } from "./src/cli/research.js";
+import { handleMetabolismStatus } from "./src/commands/metabolism-status.js";
 
 // Default: check every hour
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
@@ -164,5 +167,20 @@ export default function register(api: OpenClawPluginApi) {
     priority: 90,
   });
 
-  api.logger.info("Scientify plugin loaded (research mode: always active)");
+  // Inject SKILL.md into cron session messages (for metabolism heartbeat).
+  api.on("before_agent_start", createCronSkillInjectionHook());
+
+  // Register CLI commands: openclaw research init/list/status/delete
+  registerResearchCli(api);
+
+  // Register metabolism chat commands
+  api.registerCommand({
+    name: "metabolism-status",
+    description: "Show knowledge metabolism status (day, topics, hypotheses)",
+    acceptsArgs: false,
+    requireAuth: false,
+    handler: handleMetabolismStatus,
+  });
+
+  api.logger.info("Scientify plugin loaded");
 }

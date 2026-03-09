@@ -14,7 +14,7 @@ metadata:
 
 **Don't ask permission. Just do it.**
 
-**Workspace:** See `../_shared/workspace-spec.md`. Set `$W` to the active project directory.
+**Workspace:** `$W` = working directory provided in task parameter.
 
 ## Prerequisites
 
@@ -23,8 +23,8 @@ metadata:
 | `$W/task.json` | /research-pipeline or user |
 | `$W/survey_res.md` | /research-survey |
 | `$W/notes/paper_*.md` | /research-survey |
-| `$W/repos/` | /literature-survey Phase 3 |
-| `$W/prepare_res.md` | /literature-survey Phase 3 |
+| `$W/repos/` | /research-collect Phase 3 |
+| `$W/prepare_res.md` | /research-collect Phase 3 |
 
 **If `survey_res.md` is missing, STOP:** "需要先运行 /research-survey 完成深度分析"
 

@@ -12,9 +12,9 @@ export const UnpaywallDownloadToolSchema = Type.Object({
     minItems: 1,
     maxItems: 20,
   }),
-  output_dir: Type.String({
-    description: "Absolute path to output directory where PDFs will be saved.",
-  }),
+  output_dir: Type.Optional(Type.String({
+    description: "Output directory where PDFs will be saved. Defaults to 'papers/' relative to cwd. Can be relative or absolute.",
+  })),
 });
 
 type UnpaywallResponse = {
@@ -83,7 +83,7 @@ export function createUnpaywallDownloadTool() {
       }
       const dois = doisRaw.map((d) => String(d).trim()).filter((d) => d.length > 0);
 
-      const outputDir = readStringParam(params, "output_dir", { required: true })!;
+      const outputDir = readStringParam(params, "output_dir") ?? "papers";
       const resolvedOutputDir = resolve(outputDir);
 
       // Create output directory if it doesn't exist

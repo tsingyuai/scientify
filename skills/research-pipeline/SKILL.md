@@ -94,22 +94,17 @@ task 必须以 `/skill-name` 开头（触发 slash command 解析），后续行
 
 ## Workspace
 
-See `../_shared/workspace-spec.md`. Set `$W` to the active project directory.
+`$W` = agent workspace root (see AGENTS.md for layout).
 
 ---
 
 ## Step 0: 初始化
 
-```bash
-ACTIVE=$(cat ~/.openclaw/workspace/projects/.active 2>/dev/null)
-```
+`$W` 即当前 agent 的工作目录（AGENTS.md 中定义）。
 
-如果没有 active project：
-1. 问用户：研究主题是什么？
-2. 创建项目目录
-3. 写入 `task.json`
+检查 `$W/SOUL.md` 是否包含研究方向信息。如果没有（BOOTSTRAP 未完成），提示用户先完成 BOOTSTRAP 配置。
 
-设置 `$W = ~/.openclaw/workspace/projects/{project-id}`
+确保 `$W` 下存在必要的子目录（如 `survey/`, `papers/` 等）。
 
 ---
 
@@ -122,8 +117,8 @@ ACTIVE=$(cat ~/.openclaw/workspace/projects/.active 2>/dev/null)
 **检查:** `$W/papers/_meta/` 目录存在且有 `.json` 文件？
 
 **如果缺失，调用 sessions_spawn 工具（然后停止，等待完成通知）：**
-- task: `"/literature-survey\n工作目录: {$W绝对路径}\n研究主题: {从task.json提取}\n请搜索、筛选、下载论文到工作目录的 papers/ 下。"`
-- label: `"Literature Survey"`
+- task: `"/research-collect\n工作目录: {$W绝对路径}\n研究主题: {从task.json提取}\n请搜索、筛选、下载论文到工作目录的 papers/ 下。"`
+- label: `"Research Collect"`
 - runTimeoutSeconds: `1800`
 
 **验证:** `ls $W/papers/_meta/*.json` 至少有 3 个文件

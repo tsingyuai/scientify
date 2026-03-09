@@ -275,7 +275,7 @@ openclaw gateway
 
 ```
 /research-pipeline
-/literature-survey
+/research-collect
 /idea-generation
 ```
 
@@ -310,7 +310,7 @@ openclaw gateway
 | Skill | 斜杠命令 | 描述 |
 |-------|---------|------|
 | **research-pipeline** | `/research-pipeline` | 编排器。逐阶段 spawn 子 agent，验证产出后推进。 |
-| **literature-survey** | `/literature-survey` | 搜索 arXiv → 筛选 → 下载 .tex 源文件 → 聚类 → 生成调研报告。 |
+| **research-collect** | `/research-collect` | 搜索 arXiv → 筛选 → 下载 .tex 源文件 → 聚类 → 生成调研报告。 |
 | **research-survey** | `/research-survey` | 深度分析论文：提取公式、映射代码、生成核心方法对比表。 |
 | **research-plan** | `/research-plan` | 从调研结果制定四部分实现计划（数据集/模型/训练/测试）。 |
 | **research-implement** | `/research-implement` | 按计划实现 ML 代码，`uv` 虚拟环境隔离，2 epoch 验证。 |

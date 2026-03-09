@@ -27,8 +27,10 @@
     "skills/research-implement",
     "skills/research-review",
     "skills/research-experiment",
-    "skills/literature-survey",
+    "skills/research-collect",
     "skills/write-review-paper",
-    "skills/research-subscription"
+    "skills/research-subscription",
+    "skills/metabolism",
+    "skills/metabolism-init"
   ]
 }

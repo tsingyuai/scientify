@@ -15,7 +15,7 @@ metadata:
 
 **Don't ask permission. Just do it.**
 
-**Workspace:** See `../_shared/workspace-spec.md`. Set `$W` to the active project directory.
+**Workspace:** `$W` = working directory provided in task parameter.
 
 ## Prerequisites
 
