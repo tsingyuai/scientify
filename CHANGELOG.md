@@ -1,3 +1,9 @@
+## [1.12.1](https://github.com/tsingyuai/scientify/compare/v1.12.0...v1.12.1) (2026-03-09)
+
+### Bug Fixes
+
+* harden execution truth and quality-gated state persistence ([74cf61a](https://github.com/tsingyuai/scientify/commit/74cf61af43cd2d6f81479490242b4e047fee5745))
+
 ## [1.12.0](https://github.com/tsingyuai/scientify/compare/v1.11.0...v1.12.0) (2026-03-07)
 
 ### Features
