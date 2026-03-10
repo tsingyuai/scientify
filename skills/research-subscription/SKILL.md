@@ -110,6 +110,10 @@ For selected core papers, prefer full-text reading first:
   - do not emit BRIDGE unless `evidence_ids` resolve to this run's papers and include at least one full-text-backed paper
 - Hypothesis gate:
   - avoid speculative guesses; each hypothesis should include >=2 `evidence_ids`, `dependency_path` length >=2, and novelty/feasibility/impact scores
+  - before user-facing text, read `status.knowledge_state_summary.hypothesis_gate.accepted`
+    - if `accepted == 0`: output factual cycle report only (papers/read-status/changes/gates); do not output speculative "high-value routes"/"deep dive" guidance
+    - if `accepted > 0`: include hypothesis details in the current message by default (stable delivery path)
+    - only if runtime/channel clearly supports multi-send, optionally split into two consecutive messages (alert first, details second)
 If an incremental pass returns no unseen papers, run one fallback representative pass before returning empty.
 If user gives explicit preference feedback during follow-up (read/skip/star style intent, source preference, direction preference),
 persist it via `scientify_literature_state` action=`feedback` (backend-only memory, not user-facing by default).

@@ -377,6 +377,10 @@ Behavior notes:
 - Built-in quality gates use soft mode by default: non-fatal quality gaps are stored as warnings (`quality_gate.severity=warn`) while the run remains `ok`; only fatal issues are downgraded to `degraded_quality`.
 - Default strict recall behavior uses tiered retrieval (topic-related + broader method + adjacent cross-domain) to avoid sparse core selection on broad topics.
 - Each run executes at most one immediate reflection follow-up and writes trace/results back to `knowledge_state` for auditability.
+- Hypothesis-facing response policy is gate-driven:
+  - if `knowledge_state_summary.hypothesis_gate.accepted == 0`, Scientify returns factual cycle status only (no speculative roadmap/deep-dive suggestions)
+  - if `accepted > 0`, Scientify includes hypothesis details in the current message by default
+  - when channel/runtime clearly supports multi-send, it may optionally split into two consecutive pushes (brief alert + detailed hypothesis)
 - Lightweight preference memory is stored backend-only (keyword/source affinities) and used to rerank future pushes quietly.
 - Incremental dedupe + memory state is persisted under `~/.openclaw/workspace/scientify/` (`literature-state.json`, `literature-push-log.jsonl`).
 - Project-level research traceability is persisted under `~/.openclaw/workspace/projects/{project-id}/knowledge_state/`.

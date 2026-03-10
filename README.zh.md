@@ -374,7 +374,11 @@ openclaw gateway
 - 一次性研究任务（`at ... --topic ...`）使用“代表论文聚焦检索”；周期任务（`daily/weekly/every/cron`）保持“增量追踪”模式。
 - 周期增量模式会先构建候选池并评分后再选 Top-K；若本轮无“未推送新文献”，会自动再跑一轮代表性回退检索，再决定是否返回空结果。
 - 默认 `max_papers` 为 5（可用 `--max-papers` 覆盖）。
-- 研究记录内置质量闸门：核心论文全文覆盖率 >= 80%、证据绑定率 >= 90%、引用错误率 < 2%。未达标会自动降级为 `degraded_quality`。
+- 研究记录内置质量闸门：核心论文全文覆盖率 >= 80%、证据绑定率 >= 90%、引用错误率 < 2%。默认采用 soft gate：非致命缺口会记录为 warning（`quality_gate.severity=warn`）但保留 `ok`，仅 fatal 问题才降级为 `degraded_quality`。
+- 假设相关回复采用门禁驱动：
+  - 当 `knowledge_state_summary.hypothesis_gate.accepted == 0`：只返回事实型周期状态（论文/阅读状态/变更/门禁），不输出泛化“下一步路线/deep dive”建议。
+  - 当 `accepted > 0`：默认在当前消息内直接给出假设详情。
+  - 仅在渠道/运行时明确支持多次发送时，才可拆成两条连续推送（简报 + 详情）。
 - 轻量偏好记忆（关键词/来源亲和）仅后台保存，不默认展示给用户，会静默影响后续排序。
 - 增量去重与偏好状态会持久化到 `~/.openclaw/workspace/scientify/`（`literature-state.json`、`literature-push-log.jsonl`）。
 - 项目级研究可追溯状态会持久化到 `~/.openclaw/workspace/projects/{project-id}/knowledge_state/`。
