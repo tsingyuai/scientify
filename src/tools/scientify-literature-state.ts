@@ -1311,6 +1311,17 @@ export function createScientifyLiteratureStateTool() {
             topic,
             ...(projectId ? { projectId } : {}),
           });
+          const detailedPaperById = new Map<
+            string,
+            NonNullable<typeof status.knowledgeStateSummary>["recentPapers"][number]
+          >(
+            (status.knowledgeStateSummary?.recentPapers ?? [])
+              .map((paper) => [paper.id, paper] as const)
+              .filter((entry): entry is [string, NonNullable<typeof status.knowledgeStateSummary>["recentPapers"][number]] => {
+                const [id] = entry;
+                return typeof id === "string" && id.trim().length > 0;
+              }),
+          );
           return Result.ok({
             action,
             scope: status.scope,
@@ -1374,6 +1385,19 @@ export function createScientifyLiteratureStateTool() {
               first_pushed_at_ms: paper.firstPushedAtMs,
               last_pushed_at_ms: paper.lastPushedAtMs,
               push_count: paper.pushCount,
+              ...(detailedPaperById.has(paper.id)
+                ? {
+                    full_text_read: detailedPaperById.get(paper.id)?.fullTextRead ?? null,
+                    read_status: detailedPaperById.get(paper.id)?.readStatus ?? null,
+                    unread_reason: detailedPaperById.get(paper.id)?.unreadReason ?? null,
+                    evidence_anchors: (detailedPaperById.get(paper.id)?.evidenceAnchors ?? []).map((anchor) => ({
+                      section: anchor.section ?? null,
+                      locator: anchor.locator ?? null,
+                      claim: anchor.claim,
+                      quote: anchor.quote ?? null,
+                    })),
+                  }
+                : {}),
             })),
           });
         }

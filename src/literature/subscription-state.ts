@@ -588,6 +588,93 @@ function tokenizeKeywords(raw: string): string[] {
   return [...seen];
 }
 
+function inferTopicAliases(tokens: string[]): string[] {
+  const normalized = tokens
+    .map((token) => token.toLowerCase())
+    .filter((token) => /^[a-z][a-z0-9_-]*$/.test(token))
+    .slice(0, 6);
+  if (normalized.length < 3) return [];
+
+  const aliases = new Set<string>();
+  const [a, b, c] = normalized;
+  if (a.length >= 2 && b.length >= 1 && c.length >= 1) {
+    aliases.add(`${a.slice(0, 2)}${b[0]}${c[0]}`);
+  }
+  aliases.add(`${a[0]}${b[0]}${c[0]}`);
+
+  const hasLow = normalized.includes("low");
+  const hasRank = normalized.includes("rank");
+  const hasAdapt = normalized.some((token) => token.startsWith("adapt"));
+  if (hasLow && hasRank && hasAdapt) aliases.add("lora");
+
+  return [...aliases].filter((alias) => alias.length >= 3 && alias.length <= 8);
+}
+
+function buildScoringTokens(topic: string): string[] {
+  const stopwords = new Set([
+    "from",
+    "with",
+    "without",
+    "first",
+    "basics",
+    "basic",
+    "foundational",
+    "foundation",
+    "seminal",
+    "classic",
+    "avoid",
+    "benchmark",
+    "only",
+    "prefer",
+    "authoritative",
+    "latest",
+    "recent",
+    "paper",
+    "papers",
+    "study",
+    "works",
+  ]);
+  const rawTokens = tokenizeKeywords(topic);
+  const aliases = inferTopicAliases(rawTokens);
+  const base = rawTokens.filter((token) => token.length >= 4 && !stopwords.has(token));
+  if (base.length > 0) return [...new Set([...base, ...aliases])].slice(0, 10);
+  return [...new Set([...rawTokens, ...aliases])].slice(0, 10);
+}
+
+function buildRetrievalSeedTokens(topic: string): string[] {
+  const directiveWords = new Set([
+    "from",
+    "with",
+    "without",
+    "first",
+    "basics",
+    "basic",
+    "foundational",
+    "foundation",
+    "seminal",
+    "classic",
+    "avoid",
+    "benchmark",
+    "only",
+    "prefer",
+    "authoritative",
+    "latest",
+    "recent",
+    "paper",
+    "papers",
+    "study",
+    "works",
+    "strict",
+    "fast",
+  ]);
+  const rawTokens = tokenizeKeywords(topic);
+  const aliases = inferTopicAliases(rawTokens);
+  const tokens = rawTokens
+    .map((token) => token.toLowerCase())
+    .filter((token) => token.length >= 3 && !directiveWords.has(token));
+  return [...new Set([...tokens, ...aliases])].slice(0, 10);
+}
+
 type ArxivFallbackCandidate = {
   id: string;
   title: string;
@@ -595,6 +682,27 @@ type ArxivFallbackCandidate = {
   url: string;
   published?: string;
 };
+
+type RequirementProfile = {
+  foundationalFirst: boolean;
+  avoidBenchmarkOnly: boolean;
+  preferSurvey: boolean;
+  preferAuthority: boolean;
+  preferRecent: boolean;
+};
+
+const FOUNDATIONAL_HINT_RE =
+  /\b(foundational|foundation|seminal|classic|groundwork|original paper|from basics|start from basics|first principles)\b|\u57fa\u7840|\u5950\u57fa|\u7ecf\u5178|\u539f\u59cb/u;
+const AVOID_BENCHMARK_HINT_RE =
+  /\b(avoid benchmark|benchmark-only|no benchmark|less benchmark|not benchmark only)\b|\u5c11\u63a8.*benchmark|\u4e0d\u8981.*benchmark/u;
+const SURVEY_HINT_RE = /\b(survey|review|taxonomy|overview|tutorial)\b|\u7efc\u8ff0|\u8bc4\u8ff0/u;
+const AUTHORITY_HINT_RE =
+  /\b(authoritative|high impact|top-tier|highly cited|landmark|canonical)\b|\u6743\u5a01|\u9ad8\u5f15\u7528/u;
+const RECENT_HINT_RE = /\b(latest|recent|state[- ]of[- ]the[- ]art|newest)\b|\u6700\u65b0|\u8fd1\u671f/u;
+const BENCHMARK_WORD_RE = /\b(benchmark|leaderboard|dataset|evaluation)\b/i;
+const METHOD_WORD_RE =
+  /\b(method|approach|adaptation|training|fine[- ]?tuning|optimization|algorithm|framework|model)\b/i;
+const SURVEY_WORD_RE = /\b(survey|review|taxonomy|overview|tutorial)\b/i;
 
 function decodeXmlEntities(raw: string): string {
   return raw
@@ -649,8 +757,9 @@ function dedupeQueries(queries: string[], limit: number): string[] {
 }
 
 function buildStrictFallbackQueries(topic: string): string[] {
-  const normalizedTopic = normalizeText(topic);
-  const tokens = tokenizeKeywords(normalizedTopic).filter((token) => token.length >= 3).slice(0, 10);
+  const seedTokens = buildRetrievalSeedTokens(topic);
+  const normalizedTopic = seedTokens.length > 0 ? seedTokens.join(" ") : normalizeText(topic);
+  const tokens = seedTokens.length > 0 ? seedTokens : tokenizeKeywords(normalizedTopic).filter((token) => token.length >= 3).slice(0, 10);
   const queries: string[] = [normalizedTopic];
   if (tokens.length >= 2) queries.push(tokens.slice(0, 4).join(" "));
   if (tokens.length >= 3) queries.push(tokens.slice(0, 3).join(" "));
@@ -658,8 +767,9 @@ function buildStrictFallbackQueries(topic: string): string[] {
 }
 
 function buildTieredFallbackQueries(topic: string): Record<RecallTier, string[]> {
-  const normalizedTopic = normalizeText(topic);
-  const tokens = tokenizeKeywords(normalizedTopic).filter((token) => token.length >= 3).slice(0, 10);
+  const seedTokens = buildRetrievalSeedTokens(topic);
+  const normalizedTopic = seedTokens.length > 0 ? seedTokens.join(" ") : normalizeText(topic);
+  const tokens = seedTokens.length > 0 ? seedTokens : tokenizeKeywords(normalizedTopic).filter((token) => token.length >= 3).slice(0, 10);
 
   const tierA = buildStrictFallbackQueries(topic);
   const tierB = dedupeQueries(
@@ -688,17 +798,79 @@ function buildTieredFallbackQueries(topic: string): Record<RecallTier, string[]>
   };
 }
 
+function inferRequirementProfile(raw: string): RequirementProfile {
+  const text = normalizeText(raw);
+  return {
+    foundationalFirst: FOUNDATIONAL_HINT_RE.test(text),
+    avoidBenchmarkOnly: AVOID_BENCHMARK_HINT_RE.test(text),
+    preferSurvey: SURVEY_HINT_RE.test(text),
+    preferAuthority: AUTHORITY_HINT_RE.test(text),
+    preferRecent: RECENT_HINT_RE.test(text),
+  };
+}
+
+function inferCandidateYear(paper: ArxivFallbackCandidate): number | undefined {
+  if (paper.published) {
+    const ts = Date.parse(paper.published);
+    if (Number.isFinite(ts)) return new Date(ts).getUTCFullYear();
+  }
+  const modern = paper.id.match(/:(\d{2})(\d{2})\./);
+  if (modern?.[1]) {
+    const yy = Number.parseInt(modern[1], 10);
+    if (Number.isFinite(yy)) return 2000 + yy;
+  }
+  return undefined;
+}
+
+function isBenchmarkOnlyPaper(paper: ArxivFallbackCandidate): boolean {
+  const text = `${paper.title} ${paper.summary ?? ""}`;
+  return BENCHMARK_WORD_RE.test(text) && !METHOD_WORD_RE.test(text);
+}
+
+function isSurveyPaper(paper: ArxivFallbackCandidate): boolean {
+  const text = `${paper.title} ${paper.summary ?? ""}`;
+  return SURVEY_WORD_RE.test(text);
+}
+
+function isFoundationalPaper(args: {
+  paper: ArxivFallbackCandidate;
+  year?: number;
+  topicTokens: string[];
+}): boolean {
+  const year = args.year;
+  const nowYear = new Date().getUTCFullYear();
+  const oldEnough = typeof year === "number" ? year <= nowYear - 2 : false;
+  const title = normalizeText(args.paper.title).toLowerCase();
+  const tokenHit = args.topicTokens.some((token) => token.length >= 4 && title.includes(token));
+  return oldEnough || tokenHit;
+}
+
 function countTokenOverlap(tokens: string[], text: string): number {
-  const hay = ` ${normalizeText(text).toLowerCase()} `;
+  const hay = ` ${normalizeText(text)
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")} `;
   let score = 0;
   for (const token of tokens) {
     if (token.length < 2) continue;
-    if (hay.includes(` ${token} `)) score += 1;
+    const normalizedToken = token
+      .toLowerCase()
+      .replace(/[_-]+/g, " ")
+      .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+      .trim();
+    if (!normalizedToken) continue;
+    if (hay.includes(` ${normalizedToken} `)) score += 1;
   }
   return score;
 }
 
-function scoreFallbackCandidate(topicTokens: string[], paper: ArxivFallbackCandidate, tier: RecallTier): number {
+function scoreFallbackCandidate(
+  topicTokens: string[],
+  paper: ArxivFallbackCandidate,
+  tier: RecallTier,
+  requirements: RequirementProfile,
+): number {
   const titleOverlap = countTokenOverlap(topicTokens, paper.title);
   const abstractOverlap = countTokenOverlap(topicTokens, paper.summary ?? "");
   const publishedAt = paper.published ? Date.parse(paper.published) : NaN;
@@ -706,7 +878,29 @@ function scoreFallbackCandidate(topicTokens: string[], paper: ArxivFallbackCandi
     ? Math.max(0, Math.min(8, (Date.now() - publishedAt) / (1000 * 60 * 60 * 24 * -180)))
     : 0;
   const tierBoost = tier === "tierA" ? 8 : tier === "tierB" ? 4 : 1;
-  const rawScore = 60 + tierBoost + titleOverlap * 8 + abstractOverlap * 3 + recencyBoost;
+  const year = inferCandidateYear(paper);
+  const isBenchmarkOnly = isBenchmarkOnlyPaper(paper);
+  const isSurvey = isSurveyPaper(paper);
+  const isFoundational = isFoundationalPaper({ paper, year, topicTokens });
+  const nowYear = new Date().getUTCFullYear();
+  const recencyPenalty = typeof year === "number" && year >= nowYear ? 4 : 0;
+  let rawScore = 60 + tierBoost + titleOverlap * 8 + abstractOverlap * 3 + recencyBoost - recencyPenalty;
+  if (requirements.foundationalFirst) {
+    rawScore += isFoundational ? 10 : -4;
+  }
+  if (requirements.preferSurvey) {
+    rawScore += isSurvey ? 8 : 0;
+  }
+  if (requirements.preferAuthority) {
+    rawScore += isSurvey ? 3 : 0;
+    if (isFoundational) rawScore += 2;
+  }
+  if (requirements.preferRecent && typeof year === "number" && year >= nowYear - 1) {
+    rawScore += 4;
+  }
+  if (requirements.avoidBenchmarkOnly && isBenchmarkOnly) {
+    rawScore -= 15;
+  }
   return Math.max(50, Math.min(99, Math.round(rawScore)));
 }
 
@@ -743,6 +937,7 @@ async function strictCoreFallbackSeed(args: {
   candidatePool?: number;
   minCoreFloor?: number;
   knownPaperIds: Set<string>;
+  requirements: RequirementProfile;
 }): Promise<{
   papers: PaperRecordInput[];
   corePapers: KnowledgePaperInput[];
@@ -788,21 +983,52 @@ async function strictCoreFallbackSeed(args: {
   }
 
   const topicTokens = tokenizeKeywords(args.topic);
+  const scoringTokens = buildScoringTokens(args.topic);
   const ranked = [...byId.values()]
-    .map(({ row, tier }) => ({
-      row,
-      tier,
-      score: scoreFallbackCandidate(topicTokens, row, tier),
-    }))
+    .map(({ row, tier }) => {
+      const year = inferCandidateYear(row);
+      const isSurvey = isSurveyPaper(row);
+      const isBenchmarkOnly = isBenchmarkOnlyPaper(row);
+      const isFoundational = isFoundationalPaper({ paper: row, year, topicTokens });
+      const relevance = countTokenOverlap(scoringTokens, `${row.title} ${row.summary ?? ""}`);
+      return {
+        row,
+        tier,
+        year,
+        isSurvey,
+        isBenchmarkOnly,
+        isFoundational,
+        relevance,
+        score: scoreFallbackCandidate(scoringTokens.length > 0 ? scoringTokens : topicTokens, row, tier, args.requirements),
+      };
+    })
     .sort((a, b) => b.score - a.score);
 
   const unseen = ranked.filter((item) => !args.knownPaperIds.has(item.row.id));
-  const effectivePool = unseen.length > 0 ? unseen : ranked;
+  const poolBeforeRelevance = unseen.length > 0 ? unseen : ranked;
+  const minRelevance = scoringTokens.length >= 2 ? 2 : 1;
   const candidatePool = Math.max(
     1,
     Math.min(40, Math.floor(args.candidatePool ?? Math.max(DEFAULT_STRICT_CANDIDATE_POOL, args.maxPapers * 4))),
   );
   const minCoreFloor = Math.max(1, Math.min(args.maxPapers, args.minCoreFloor ?? DEFAULT_STRICT_MIN_CORE_FLOOR));
+  const effectivePoolByRelevance = poolBeforeRelevance.filter((item) => item.relevance >= minRelevance);
+  const focusTokens = scoringTokens.filter((token) => token.length >= 5);
+  const weakRelevanceWithFocusPool = poolBeforeRelevance.filter((item) => {
+    if (item.relevance < 1) return false;
+    if (focusTokens.length === 0) return true;
+    const focusHit = countTokenOverlap(focusTokens, `${item.row.title} ${item.row.summary ?? ""}`);
+    return focusHit >= 1;
+  });
+  const weakRelevancePool = weakRelevanceWithFocusPool.length > 0
+    ? weakRelevanceWithFocusPool
+    : poolBeforeRelevance.filter((item) => item.relevance >= 1);
+  const effectivePool =
+    effectivePoolByRelevance.length >= minCoreFloor
+      ? effectivePoolByRelevance
+      : weakRelevancePool.length > 0
+        ? weakRelevancePool
+        : poolBeforeRelevance;
   const targetCount = Math.max(minCoreFloor, Math.min(args.maxPapers, candidatePool));
   const tierTargets = {
     tierA: Math.max(1, Math.round(targetCount * TIER_A_RATIO)),
@@ -835,6 +1061,41 @@ async function strictCoreFallbackSeed(args: {
     }
   }
 
+  const ensureAtLeast = (predicate: (item: (typeof ranked)[number]) => boolean, need: number) => {
+    while (selected.filter(predicate).length < need) {
+      const candidate = effectivePool.find((item) => !selectedIds.has(item.row.id) && predicate(item));
+      if (!candidate) break;
+      const replaceIndex = selected.findIndex((item) => !predicate(item));
+      if (replaceIndex < 0) break;
+      selectedIds.delete(selected[replaceIndex].row.id);
+      selected[replaceIndex] = candidate;
+      selectedIds.add(candidate.row.id);
+    }
+  };
+
+  if (args.requirements.foundationalFirst) {
+    ensureAtLeast((item) => item.isFoundational, Math.min(2, targetCount));
+  }
+  if (args.requirements.preferSurvey) {
+    ensureAtLeast((item) => item.isSurvey, 1);
+  }
+  if (args.requirements.avoidBenchmarkOnly) {
+    for (let i = 0; i < selected.length; i += 1) {
+      if (!selected[i].isBenchmarkOnly) continue;
+      const replacement = effectivePool.find(
+        (item) => !selectedIds.has(item.row.id) && !item.isBenchmarkOnly,
+      );
+      if (!replacement) break;
+      selectedIds.delete(selected[i].row.id);
+      selected[i] = replacement;
+      selectedIds.add(replacement.row.id);
+    }
+  }
+
+  tierStats.tierA.selected = selected.filter((item) => item.tier === "tierA").length;
+  tierStats.tierB.selected = selected.filter((item) => item.tier === "tierB").length;
+  tierStats.tierC.selected = selected.filter((item) => item.tier === "tierC").length;
+
   const papers: PaperRecordInput[] = selected.map(({ row, score }) => ({
     id: row.id,
     title: row.title,
@@ -861,7 +1122,7 @@ async function strictCoreFallbackSeed(args: {
     papers,
     corePapers,
     explorationTrace: traces,
-    notes: `strict_core_backfill_seed selected=${selected.length} pool=${candidatePool} floor=${minCoreFloor}`,
+    notes: `strict_core_backfill_seed selected=${selected.length} pool=${candidatePool} floor=${minCoreFloor} relevance_floor=${minRelevance} req_foundational=${args.requirements.foundationalFirst} req_avoid_benchmark=${args.requirements.avoidBenchmarkOnly} req_survey=${args.requirements.preferSurvey}`,
     recallTierStats: tierStats,
   };
 }
@@ -1586,6 +1847,16 @@ export async function recordIncrementalPush(args: {
           ...(effectiveRunLog ? { runLog: effectiveRunLog } : {}),
         }
       : undefined;
+  const requirementProfile = inferRequirementProfile(
+    [
+      topicState.topic,
+      args.note,
+      effectiveRunLog?.notes,
+      effectiveKnowledgeState?.runLog?.notes,
+    ]
+      .filter((item): item is string => Boolean(item && item.trim().length > 0))
+      .join(" "),
+  );
 
   if (incomingRunProfile === "strict") {
     const strictMinCoreFloor = Math.max(1, Math.min(topicState.preferences.maxPapers, DEFAULT_STRICT_MIN_CORE_FLOOR));
@@ -1611,6 +1882,7 @@ export async function recordIncrementalPush(args: {
         candidatePool: strictCandidatePool,
         minCoreFloor: requiredCoreFloor,
         knownPaperIds: knownIds,
+        requirements: requirementProfile,
       });
 
       if (fallback.papers.length > 0) {
