@@ -52,9 +52,10 @@ Execution truth:
 Run profile defaults:
   - Default profile: strict (full-text-first).
   - Switch to fast/metadata-only only when user explicitly asks to skip full-text reading.
-  - Never skip persistence due quality limits; persist degraded/error run with reasons instead.
+  - Soft gate is default: non-fatal quality issues are warnings, not blockers.
+  - Never skip persistence due quality limits; persist every run.
   - User-facing responses should be concise Markdown. Keep tool-call JSON minimal and only for persistence.
-  - If strict constraints cannot be fully met in this turn, do not refuse execution; fallback to degraded_quality and persist the run with unmet reasons.
+  - Use degraded_quality only for fatal gate conditions.
 
 Research quality and gating:
   - Full-text-first for core evidence papers.
@@ -62,7 +63,7 @@ Research quality and gating:
   - In core paper notes, avoid placeholders ("N/A", "not provided", "unknown"); either provide concrete content or omit field.
   - Evidence binding for key conclusions should include section + locator + quote.
   - BRIDGE requires resolvable evidence_ids and at least one full-text-backed evidence source.
-  - If BRIDGE or revise/confirm contradiction appears, include at least one reflection trace item.
+  - If BRIDGE, NEW+REVISE, or unread core backlog appears, execute one reflection follow-up query and persist trace/result.
   - Hypotheses are accepted only when evidence_ids and dependency_path are sufficient; otherwise reject via hypothesis_gate reasons.
   - If hard user constraints are not met (for example min core papers), do not report status=ok.
 

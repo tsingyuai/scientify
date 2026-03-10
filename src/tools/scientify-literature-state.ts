@@ -173,6 +173,30 @@ const KnowledgeRunLogSchema = Type.Object({
   temp_cleanup_note: Type.Optional(Type.String({ description: "Optional cleanup note/error." })),
   full_text_attempted: Type.Optional(Type.Number({ description: "Number of papers attempted for full-text read." })),
   full_text_completed: Type.Optional(Type.Number({ description: "Number of papers successfully full-text read." })),
+  recall_tier_stats: Type.Optional(
+    Type.Object({
+      tier_a: Type.Optional(
+        Type.Object({
+          candidates: Type.Number(),
+          selected: Type.Number(),
+        }),
+      ),
+      tier_b: Type.Optional(
+        Type.Object({
+          candidates: Type.Number(),
+          selected: Type.Number(),
+        }),
+      ),
+      tier_c: Type.Optional(
+        Type.Object({
+          candidates: Type.Number(),
+          selected: Type.Number(),
+        }),
+      ),
+    }),
+  ),
+  reflection_step_executed: Type.Optional(Type.Boolean({ description: "Whether one reflection follow-up query was executed." })),
+  reflection_step_result_count: Type.Optional(Type.Number({ description: "Number of papers added by reflection step." })),
 });
 
 const KnowledgeStateSchema = Type.Optional(
@@ -861,6 +885,53 @@ function readKnowledgeStatePayload(params: Record<string, unknown>): KnowledgeSt
             typeof fullTextCompletedRaw === "number" && Number.isFinite(fullTextCompletedRaw)
               ? fullTextCompletedRaw
               : undefined;
+          const recallTierStatsRaw = runLogRecord.recall_tier_stats ?? runLogRecord.recallTierStats;
+          const normalizeTierStat = (
+            raw: unknown,
+          ): { candidates: number; selected: number } | undefined => {
+            if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+            const record = raw as Record<string, unknown>;
+            const candidatesRaw = record.candidates;
+            const selectedRaw = record.selected;
+            const candidates =
+              typeof candidatesRaw === "number" && Number.isFinite(candidatesRaw)
+                ? Math.max(0, Math.floor(candidatesRaw))
+                : undefined;
+            const selected =
+              typeof selectedRaw === "number" && Number.isFinite(selectedRaw)
+                ? Math.max(0, Math.floor(selectedRaw))
+                : undefined;
+            if (candidates === undefined && selected === undefined) return undefined;
+            return {
+              candidates: candidates ?? 0,
+              selected: selected ?? 0,
+            };
+          };
+          const recallTierStats =
+            recallTierStatsRaw && typeof recallTierStatsRaw === "object" && !Array.isArray(recallTierStatsRaw)
+              ? (() => {
+                  const record = recallTierStatsRaw as Record<string, unknown>;
+                  const tierA = normalizeTierStat(record.tier_a ?? record.tierA);
+                  const tierB = normalizeTierStat(record.tier_b ?? record.tierB);
+                  const tierC = normalizeTierStat(record.tier_c ?? record.tierC);
+                  if (!tierA && !tierB && !tierC) return undefined;
+                  return {
+                    ...(tierA ? { tierA } : {}),
+                    ...(tierB ? { tierB } : {}),
+                    ...(tierC ? { tierC } : {}),
+                  };
+                })()
+              : undefined;
+          const reflectionStepExecuted =
+            typeof (runLogRecord.reflection_step_executed ?? runLogRecord.reflectionStepExecuted) === "boolean"
+              ? Boolean(runLogRecord.reflection_step_executed ?? runLogRecord.reflectionStepExecuted)
+              : undefined;
+          const reflectionStepResultCountRaw =
+            runLogRecord.reflection_step_result_count ?? runLogRecord.reflectionStepResultCount;
+          const reflectionStepResultCount =
+            typeof reflectionStepResultCountRaw === "number" && Number.isFinite(reflectionStepResultCountRaw)
+              ? Math.max(0, Math.floor(reflectionStepResultCountRaw))
+              : undefined;
           if (
             !model &&
             !runProfile &&
@@ -875,7 +946,10 @@ function readKnowledgeStatePayload(params: Record<string, unknown>): KnowledgeSt
             !tempCleanupStatus &&
             !tempCleanupNote &&
             fullTextAttempted === undefined &&
-            fullTextCompleted === undefined
+            fullTextCompleted === undefined &&
+            !recallTierStats &&
+            reflectionStepExecuted === undefined &&
+            reflectionStepResultCount === undefined
           ) {
             return undefined;
           }
@@ -894,6 +968,9 @@ function readKnowledgeStatePayload(params: Record<string, unknown>): KnowledgeSt
             ...(tempCleanupNote ? { tempCleanupNote } : {}),
             ...(fullTextAttempted !== undefined ? { fullTextAttempted } : {}),
             ...(fullTextCompleted !== undefined ? { fullTextCompleted } : {}),
+            ...(recallTierStats ? { recallTierStats } : {}),
+            ...(reflectionStepExecuted !== undefined ? { reflectionStepExecuted } : {}),
+            ...(reflectionStepResultCount !== undefined ? { reflectionStepResultCount } : {}),
           };
         })()
       : undefined;
@@ -978,6 +1055,11 @@ function serializeKnowledgeSummaryPayload(
     recent_full_text_read_count: summary.recentFullTextReadCount,
     recent_not_full_text_read_count: summary.recentNotFullTextReadCount,
     quality_gate: {
+      mode: summary.qualityGate.mode,
+      severity: summary.qualityGate.severity,
+      warnings: summary.qualityGate.warnings,
+      fatal_reasons: summary.qualityGate.fatalReasons,
+      blocking: summary.qualityGate.blocking,
       passed: summary.qualityGate.passed,
       full_text_coverage_pct: summary.qualityGate.fullTextCoveragePct,
       evidence_binding_rate_pct: summary.qualityGate.evidenceBindingRatePct,
@@ -1025,6 +1107,11 @@ function defaultKnowledgeSummaryPayload(args: {
     recent_full_text_read_count: 0,
     recent_not_full_text_read_count: 0,
     quality_gate: {
+      mode: "soft",
+      severity: "warn",
+      warnings: ["knowledge_state_summary_missing"],
+      fatal_reasons: [],
+      blocking: false,
       passed: false,
       full_text_coverage_pct: 0,
       evidence_binding_rate_pct: 0,

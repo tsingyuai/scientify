@@ -154,6 +154,12 @@ const MAX_STRICT_FULLTEXT_ATTEMPTS = 5;
 const ARXIV_API_URL = "https://export.arxiv.org/api/query";
 const STRICT_EMPTY_FALLBACK_MAX_RESULTS = 12;
 const STRICT_EMPTY_FALLBACK_MAX_QUERIES = 4;
+const DEFAULT_STRICT_CANDIDATE_POOL = 24;
+const DEFAULT_STRICT_MIN_CORE_FLOOR = 3;
+const TIER_A_RATIO = 0.5;
+const TIER_B_RATIO = 0.35;
+const TIER_C_RATIO = 0.15;
+const REFLECTION_MAX_ADDED_PAPERS = 2;
 
 const FEEDBACK_SIGNAL_DELTA: Record<FeedbackSignal, number> = {
   read: 1,
@@ -627,16 +633,9 @@ function parseArxivAtomCandidates(xml: string): ArxivFallbackCandidate[] {
   return parsed;
 }
 
-function buildStrictFallbackQueries(topic: string): string[] {
-  const normalizedTopic = normalizeText(topic);
-  const queries: string[] = [normalizedTopic];
-  const tokens = tokenizeKeywords(normalizedTopic).filter((token) => token.length >= 3).slice(0, 8);
-  if (tokens.length >= 2) {
-    queries.push(tokens.join(" "));
-  }
-  if (tokens.length >= 4) {
-    queries.push(tokens.slice(0, 4).join(" "));
-  }
+type RecallTier = "tierA" | "tierB" | "tierC";
+
+function dedupeQueries(queries: string[], limit: number): string[] {
   const seen = new Set<string>();
   const deduped: string[] = [];
   for (const query of queries) {
@@ -644,8 +643,49 @@ function buildStrictFallbackQueries(topic: string): string[] {
     if (!key || seen.has(key)) continue;
     seen.add(key);
     deduped.push(query);
+    if (deduped.length >= limit) break;
   }
-  return deduped.slice(0, STRICT_EMPTY_FALLBACK_MAX_QUERIES);
+  return deduped;
+}
+
+function buildStrictFallbackQueries(topic: string): string[] {
+  const normalizedTopic = normalizeText(topic);
+  const tokens = tokenizeKeywords(normalizedTopic).filter((token) => token.length >= 3).slice(0, 10);
+  const queries: string[] = [normalizedTopic];
+  if (tokens.length >= 2) queries.push(tokens.slice(0, 4).join(" "));
+  if (tokens.length >= 3) queries.push(tokens.slice(0, 3).join(" "));
+  return dedupeQueries(queries, STRICT_EMPTY_FALLBACK_MAX_QUERIES);
+}
+
+function buildTieredFallbackQueries(topic: string): Record<RecallTier, string[]> {
+  const normalizedTopic = normalizeText(topic);
+  const tokens = tokenizeKeywords(normalizedTopic).filter((token) => token.length >= 3).slice(0, 10);
+
+  const tierA = buildStrictFallbackQueries(topic);
+  const tierB = dedupeQueries(
+    [
+      ...tokens.slice(0, 6).map((token) => `${token} adaptation`),
+      ...tokens.slice(0, 6).map((token) => `${token} method`),
+      ...tokens.slice(0, 4).map((token) => `${token} framework`),
+      tokens.slice(0, 4).join(" "),
+    ],
+    STRICT_EMPTY_FALLBACK_MAX_QUERIES,
+  );
+  const tierC = dedupeQueries(
+    [
+      ...tokens.slice(0, 5).map((token) => `${token} transfer learning`),
+      ...tokens.slice(0, 5).map((token) => `${token} benchmark`),
+      ...tokens.slice(0, 5).map((token) => `${token} retrieval`),
+      `${normalizedTopic} cross domain`,
+    ],
+    STRICT_EMPTY_FALLBACK_MAX_QUERIES,
+  );
+
+  return {
+    tierA: tierA.length > 0 ? tierA : [normalizedTopic],
+    tierB,
+    tierC,
+  };
 }
 
 function countTokenOverlap(tokens: string[], text: string): number {
@@ -658,14 +698,15 @@ function countTokenOverlap(tokens: string[], text: string): number {
   return score;
 }
 
-function scoreFallbackCandidate(topicTokens: string[], paper: ArxivFallbackCandidate): number {
+function scoreFallbackCandidate(topicTokens: string[], paper: ArxivFallbackCandidate, tier: RecallTier): number {
   const titleOverlap = countTokenOverlap(topicTokens, paper.title);
   const abstractOverlap = countTokenOverlap(topicTokens, paper.summary ?? "");
   const publishedAt = paper.published ? Date.parse(paper.published) : NaN;
   const recencyBoost = Number.isFinite(publishedAt)
     ? Math.max(0, Math.min(8, (Date.now() - publishedAt) / (1000 * 60 * 60 * 24 * -180)))
     : 0;
-  const rawScore = 60 + titleOverlap * 8 + abstractOverlap * 3 + recencyBoost;
+  const tierBoost = tier === "tierA" ? 8 : tier === "tierB" ? 4 : 1;
+  const rawScore = 60 + tierBoost + titleOverlap * 8 + abstractOverlap * 3 + recencyBoost;
   return Math.max(50, Math.min(99, Math.round(rawScore)));
 }
 
@@ -699,42 +740,100 @@ async function fetchArxivFallbackByQuery(query: string): Promise<ArxivFallbackCa
 async function strictCoreFallbackSeed(args: {
   topic: string;
   maxPapers: number;
+  candidatePool?: number;
+  minCoreFloor?: number;
   knownPaperIds: Set<string>;
 }): Promise<{
   papers: PaperRecordInput[];
   corePapers: KnowledgePaperInput[];
   explorationTrace: ExplorationTraceInput[];
   notes: string;
+  recallTierStats: {
+    tierA: { candidates: number; selected: number };
+    tierB: { candidates: number; selected: number };
+    tierC: { candidates: number; selected: number };
+  };
 }> {
-  const queries = buildStrictFallbackQueries(args.topic);
-  const byId = new Map<string, ArxivFallbackCandidate>();
+  const tieredQueries = buildTieredFallbackQueries(args.topic);
+  const byId = new Map<
+    string,
+    {
+      row: ArxivFallbackCandidate;
+      tier: RecallTier;
+    }
+  >();
   const traces: ExplorationTraceInput[] = [];
-  for (const query of queries) {
-    const rows = await fetchArxivFallbackByQuery(query);
-    traces.push({
-      query,
-      reason: "strict_core_backfill_seed",
-      source: "arxiv",
-      candidates: rows.length,
-      filteredTo: rows.length,
-      resultCount: rows.length,
-    });
-    for (const row of rows) {
-      if (!byId.has(row.id)) byId.set(row.id, row);
+  const tierStats = {
+    tierA: { candidates: 0, selected: 0 },
+    tierB: { candidates: 0, selected: 0 },
+    tierC: { candidates: 0, selected: 0 },
+  };
+
+  for (const tier of ["tierA", "tierB", "tierC"] as const) {
+    for (const query of tieredQueries[tier]) {
+      const rows = await fetchArxivFallbackByQuery(query);
+      tierStats[tier].candidates += rows.length;
+      traces.push({
+        query,
+        reason: `strict_core_backfill_seed_${tier}`,
+        source: "arxiv",
+        candidates: rows.length,
+        filteredTo: rows.length,
+        resultCount: rows.length,
+      });
+      for (const row of rows) {
+        if (!byId.has(row.id)) byId.set(row.id, { row, tier });
+      }
     }
   }
 
   const topicTokens = tokenizeKeywords(args.topic);
   const ranked = [...byId.values()]
-    .map((row) => ({
+    .map(({ row, tier }) => ({
       row,
-      score: scoreFallbackCandidate(topicTokens, row),
+      tier,
+      score: scoreFallbackCandidate(topicTokens, row, tier),
     }))
     .sort((a, b) => b.score - a.score);
 
   const unseen = ranked.filter((item) => !args.knownPaperIds.has(item.row.id));
   const effectivePool = unseen.length > 0 ? unseen : ranked;
-  const selected = effectivePool.slice(0, Math.max(1, Math.min(10, args.maxPapers)));
+  const candidatePool = Math.max(
+    1,
+    Math.min(40, Math.floor(args.candidatePool ?? Math.max(DEFAULT_STRICT_CANDIDATE_POOL, args.maxPapers * 4))),
+  );
+  const minCoreFloor = Math.max(1, Math.min(args.maxPapers, args.minCoreFloor ?? DEFAULT_STRICT_MIN_CORE_FLOOR));
+  const targetCount = Math.max(minCoreFloor, Math.min(args.maxPapers, candidatePool));
+  const tierTargets = {
+    tierA: Math.max(1, Math.round(targetCount * TIER_A_RATIO)),
+    tierB: Math.max(1, Math.round(targetCount * TIER_B_RATIO)),
+    tierC: Math.max(0, targetCount - Math.round(targetCount * TIER_A_RATIO) - Math.round(targetCount * TIER_B_RATIO)),
+  };
+  if (tierTargets.tierA + tierTargets.tierB + tierTargets.tierC < targetCount) {
+    tierTargets.tierA += targetCount - (tierTargets.tierA + tierTargets.tierB + tierTargets.tierC);
+  }
+
+  const selected: typeof effectivePool = [];
+  const selectedIds = new Set<string>();
+  for (const tier of ["tierA", "tierB", "tierC"] as const) {
+    const picked = effectivePool
+      .filter((item) => item.tier === tier && !selectedIds.has(item.row.id))
+      .slice(0, tierTargets[tier]);
+    for (const item of picked) {
+      selected.push(item);
+      selectedIds.add(item.row.id);
+      tierStats[tier].selected += 1;
+    }
+  }
+
+  if (selected.length < targetCount) {
+    const fill = effectivePool.filter((item) => !selectedIds.has(item.row.id)).slice(0, targetCount - selected.length);
+    for (const item of fill) {
+      selected.push(item);
+      selectedIds.add(item.row.id);
+      tierStats[item.tier].selected += 1;
+    }
+  }
 
   const papers: PaperRecordInput[] = selected.map(({ row, score }) => ({
     id: row.id,
@@ -762,7 +861,275 @@ async function strictCoreFallbackSeed(args: {
     papers,
     corePapers,
     explorationTrace: traces,
-    notes: `strict_core_backfill_seed selected=${selected.length} queries=${queries.length}`,
+    notes: `strict_core_backfill_seed selected=${selected.length} pool=${candidatePool} floor=${minCoreFloor}`,
+    recallTierStats: tierStats,
+  };
+}
+
+function isPaperFullTextRead(paper: KnowledgePaperInput): boolean {
+  return paper.fullTextRead === true || paper.readStatus === "fulltext";
+}
+
+function hasStrictEvidenceAnchor(paper: KnowledgePaperInput): boolean {
+  const anchors = paper.evidenceAnchors ?? [];
+  return anchors.some(
+    (anchor) =>
+      Boolean(anchor?.section?.trim()) &&
+      Boolean(anchor?.locator?.trim()) &&
+      Boolean(anchor?.quote?.trim()),
+  );
+}
+
+function firstNonEmptyText(values: Array<string | undefined>): string | undefined {
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const normalized = normalizeText(value);
+    if (normalized.length > 0) return normalized;
+  }
+  return undefined;
+}
+
+function toEvidencePaperId(paper: KnowledgePaperInput): string {
+  return derivePaperId({ id: paper.id, title: paper.title, url: paper.url });
+}
+
+function dedupeEvidenceIds(ids: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    const normalized = normalizeText(id);
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function applyLightweightEvidenceBinding(args: {
+  knowledgeState?: KnowledgeStateInput;
+  runProfile?: "fast" | "strict";
+}): {
+  knowledgeState?: KnowledgeStateInput;
+  anchorsAdded: number;
+  evidenceIdsFilled: number;
+} {
+  if (!args.knowledgeState) {
+    return { knowledgeState: args.knowledgeState, anchorsAdded: 0, evidenceIdsFilled: 0 };
+  }
+
+  const corePapers = args.knowledgeState.corePapers ?? [];
+  if (corePapers.length === 0) {
+    return { knowledgeState: args.knowledgeState, anchorsAdded: 0, evidenceIdsFilled: 0 };
+  }
+
+  let anchorsAdded = 0;
+  const nextCore = corePapers.map((paper) => {
+    if (!isPaperFullTextRead(paper)) return paper;
+    if (hasStrictEvidenceAnchor(paper)) return paper;
+    const quote = firstNonEmptyText([
+      paper.keyEvidenceSpans?.[0],
+      paper.summary,
+      paper.reason,
+      paper.title,
+    ]);
+    if (!quote) return paper;
+    const nextQuote = quote.slice(0, 260);
+    anchorsAdded += 1;
+    return {
+      ...paper,
+      evidenceAnchors: [
+        ...(paper.evidenceAnchors ?? []),
+        {
+          section: "AutoExtract",
+          locator: paper.fullTextRef?.trim() || "excerpt:1",
+          claim: firstNonEmptyText([paper.researchGoal, paper.reason, paper.title, "auto-bound claim"]) ?? "auto-bound claim",
+          quote: nextQuote,
+        },
+      ],
+    };
+  });
+
+  const fallbackEvidenceIds = dedupeEvidenceIds(
+    nextCore.filter((paper) => isPaperFullTextRead(paper)).map((paper) => toEvidencePaperId(paper)).slice(0, 2),
+  );
+  let evidenceIdsFilled = 0;
+
+  const patchEvidenceIds = (raw?: string[], allowAuto = true): string[] | undefined => {
+    const existing = dedupeEvidenceIds(raw ?? []);
+    if (existing.length > 0) return existing;
+    if (!allowAuto || fallbackEvidenceIds.length === 0) return undefined;
+    evidenceIdsFilled += 1;
+    return [...fallbackEvidenceIds];
+  };
+
+  const nextKnowledgeChanges = (args.knowledgeState.knowledgeChanges ?? []).map((change) => ({
+    ...change,
+    ...(change.type === "BRIDGE"
+      ? { evidenceIds: patchEvidenceIds(change.evidenceIds, false) }
+      : { evidenceIds: patchEvidenceIds(change.evidenceIds, true) }),
+  }));
+  const nextKnowledgeUpdates = (args.knowledgeState.knowledgeUpdates ?? []).map((update) => ({
+    ...update,
+    evidenceIds: patchEvidenceIds(update.evidenceIds, true),
+  }));
+  const nextHypotheses = (args.knowledgeState.hypotheses ?? []).map((hypothesis) => ({
+    ...hypothesis,
+    evidenceIds: patchEvidenceIds(hypothesis.evidenceIds, true),
+  }));
+
+  if (anchorsAdded === 0 && evidenceIdsFilled === 0) {
+    return { knowledgeState: args.knowledgeState, anchorsAdded: 0, evidenceIdsFilled: 0 };
+  }
+
+  const existingRunLog = args.knowledgeState.runLog;
+  const runLog =
+    existingRunLog || args.runProfile
+      ? {
+          ...(existingRunLog ?? {}),
+          ...(existingRunLog?.runProfile ? {} : args.runProfile ? { runProfile: args.runProfile } : {}),
+          notes: [existingRunLog?.notes, `auto_evidence_binding anchors_added=${anchorsAdded} ids_filled=${evidenceIdsFilled}`]
+            .filter((item): item is string => Boolean(item && item.trim().length > 0))
+            .join(" || "),
+        }
+      : undefined;
+
+  return {
+    knowledgeState: {
+      ...args.knowledgeState,
+      corePapers: nextCore,
+      ...(nextKnowledgeChanges.length > 0 ? { knowledgeChanges: nextKnowledgeChanges } : {}),
+      ...(nextKnowledgeUpdates.length > 0 ? { knowledgeUpdates: nextKnowledgeUpdates } : {}),
+      ...(nextHypotheses.length > 0 ? { hypotheses: nextHypotheses } : {}),
+      ...(runLog ? { runLog } : {}),
+    },
+    anchorsAdded,
+    evidenceIdsFilled,
+  };
+}
+
+function buildReflectionFollowupQuery(topic: string, hint: string): string {
+  const tokens = tokenizeKeywords(`${topic} ${hint}`).slice(0, 8);
+  if (tokens.length === 0) return normalizeText(topic);
+  return tokens.join(" ");
+}
+
+function resolveSingleStepReflectionSeed(args: {
+  topic: string;
+  knowledgeState?: KnowledgeStateInput;
+}): { trigger: "BRIDGE" | "CONFLICT" | "UNREAD_CORE"; reason: string; query: string } | undefined {
+  const changes = args.knowledgeState?.knowledgeChanges ?? [];
+  const bridgeChanges = changes.filter((item) => item.type === "BRIDGE");
+  const newChanges = changes.filter((item) => item.type === "NEW");
+  const reviseChanges = changes.filter((item) => item.type === "REVISE");
+  const unreadCore = (args.knowledgeState?.corePapers ?? []).filter((paper) => !isPaperFullTextRead(paper));
+
+  if (bridgeChanges.length > 0) {
+    const seed = bridgeChanges[0]?.statement ?? args.topic;
+    return {
+      trigger: "BRIDGE",
+      reason: "bridge_followup",
+      query: buildReflectionFollowupQuery(args.topic, seed),
+    };
+  }
+
+  if (newChanges.length >= 2 && reviseChanges.length >= 1) {
+    const seed = `${newChanges[0]?.statement ?? ""} ${reviseChanges[0]?.statement ?? ""}`.trim();
+    return {
+      trigger: "CONFLICT",
+      reason: "new_revise_followup",
+      query: buildReflectionFollowupQuery(args.topic, seed || args.topic),
+    };
+  }
+
+  if (unreadCore.length > 0) {
+    const seed = unreadCore[0]?.id ?? unreadCore[0]?.title ?? args.topic;
+    return {
+      trigger: "UNREAD_CORE",
+      reason: "unread_core_followup",
+      query: buildReflectionFollowupQuery(args.topic, seed),
+    };
+  }
+
+  return undefined;
+}
+
+async function executeSingleStepReflection(args: {
+  topic: string;
+  knownPaperIds: Set<string>;
+  effectivePapers: PaperRecordInput[];
+  knowledgeState?: KnowledgeStateInput;
+}): Promise<{
+  executed: boolean;
+  resultCount: number;
+  trace?: ExplorationTraceInput;
+  papers: KnowledgePaperInput[];
+  changes: KnowledgeStateInput["knowledgeChanges"];
+}> {
+  const seed = resolveSingleStepReflectionSeed({
+    topic: args.topic,
+    knowledgeState: args.knowledgeState,
+  });
+  if (!seed) {
+    return {
+      executed: false,
+      resultCount: 0,
+      papers: [],
+      changes: [],
+    };
+  }
+
+  const rows = await fetchArxivFallbackByQuery(seed.query);
+  const localKnownIds = new Set<string>(args.knownPaperIds);
+  for (const paper of args.effectivePapers) {
+    localKnownIds.add(derivePaperId(paper));
+  }
+  for (const paper of args.knowledgeState?.corePapers ?? []) {
+    localKnownIds.add(derivePaperId({ id: paper.id, title: paper.title, url: paper.url }));
+  }
+  for (const paper of args.knowledgeState?.explorationPapers ?? []) {
+    localKnownIds.add(derivePaperId({ id: paper.id, title: paper.title, url: paper.url }));
+  }
+
+  const selected = rows.filter((row) => !localKnownIds.has(row.id)).slice(0, REFLECTION_MAX_ADDED_PAPERS);
+  const papers: KnowledgePaperInput[] = selected.map((row) => ({
+    id: row.id,
+    title: row.title,
+    url: row.url,
+    source: "arxiv",
+    ...(row.published ? { publishedAt: row.published } : {}),
+    ...(row.summary ? { summary: row.summary } : {}),
+    fullTextRead: false,
+    readStatus: "metadata",
+    unreadReason: "single_step_reflection_added_without_fulltext",
+  }));
+  const changes: KnowledgeStateInput["knowledgeChanges"] =
+    selected.length > 0
+      ? [
+          {
+            type: "NEW",
+            statement: `Reflection follow-up added ${selected.length} adjacent paper(s) for ${args.topic}.`,
+            evidenceIds: selected.map((row) => row.id).slice(0, 3),
+            topic: args.topic,
+          },
+        ]
+      : [];
+
+  return {
+    executed: true,
+    resultCount: selected.length,
+    trace: {
+      query: seed.query,
+      reason: seed.reason,
+      source: "arxiv",
+      candidates: rows.length,
+      filteredTo: selected.length,
+      ...(selected.length === 0 ? { filteredOutReasons: ["no_unseen_reflection_candidates"] } : {}),
+      resultCount: selected.length,
+    },
+    papers,
+    changes,
   };
 }
 
@@ -1198,7 +1565,10 @@ export async function recordIncrementalPush(args: {
     if (requiredCoreRaw > 0) {
       effectiveRunLog.requiredCorePapers = Math.max(1, requiredCoreRaw);
     } else {
-      delete effectiveRunLog.requiredCorePapers;
+      effectiveRunLog.requiredCorePapers = Math.max(
+        1,
+        Math.min(topicState.preferences.maxPapers, DEFAULT_STRICT_MIN_CORE_FLOOR),
+      );
     }
 
     if (
@@ -1218,9 +1588,14 @@ export async function recordIncrementalPush(args: {
       : undefined;
 
   if (incomingRunProfile === "strict") {
+    const strictMinCoreFloor = Math.max(1, Math.min(topicState.preferences.maxPapers, DEFAULT_STRICT_MIN_CORE_FLOOR));
     const requiredCoreFloor = Math.max(
       1,
-      Math.min(topicState.preferences.maxPapers, effectiveRunLog?.requiredCorePapers ?? Math.min(3, topicState.preferences.maxPapers)),
+      Math.min(topicState.preferences.maxPapers, effectiveRunLog?.requiredCorePapers ?? strictMinCoreFloor),
+    );
+    const strictCandidatePool = Math.max(
+      DEFAULT_STRICT_CANDIDATE_POOL,
+      topicState.preferences.maxPapers * 4,
     );
     const existingCorePapers = effectiveKnowledgeState?.corePapers ?? [];
     const strictSignalCount = Math.max(existingCorePapers.length, effectivePapers.length);
@@ -1232,7 +1607,9 @@ export async function recordIncrementalPush(args: {
       }
       const fallback = await strictCoreFallbackSeed({
         topic: topicState.topic,
-        maxPapers: requiredCoreFloor,
+        maxPapers: topicState.preferences.maxPapers,
+        candidatePool: strictCandidatePool,
+        minCoreFloor: requiredCoreFloor,
         knownPaperIds: knownIds,
       });
 
@@ -1253,6 +1630,7 @@ export async function recordIncrementalPush(args: {
         effectivePapers = dedupePaperRecords([...effectivePapers, ...fallbackPapers]);
         const mergedRunLog = {
           ...(effectiveRunLog ?? { runProfile: "strict" as const }),
+          recallTierStats: fallback.recallTierStats,
           notes: [
             effectiveRunLog?.notes,
             fallback.notes,
@@ -1324,6 +1702,76 @@ export async function recordIncrementalPush(args: {
         runLog: strictRunLog,
       };
     }
+  }
+
+  const reflection = await executeSingleStepReflection({
+    topic: topicState.topic,
+    knownPaperIds: new Set<string>(Object.keys(topicState.pushedPapers)),
+    effectivePapers,
+    knowledgeState: effectiveKnowledgeState,
+  });
+  const reflectionRunLogBase =
+    effectiveRunLog ??
+    (incomingRunProfile ? { runProfile: incomingRunProfile } : undefined);
+  if (reflection.executed) {
+    const reflectionPaperRecords: PaperRecordInput[] = reflection.papers.map((paper) => ({
+      ...(paper.id ? { id: paper.id } : {}),
+      ...(paper.title ? { title: paper.title } : {}),
+      ...(paper.url ? { url: paper.url } : {}),
+      ...(typeof paper.score === "number" && Number.isFinite(paper.score) ? { score: paper.score } : {}),
+      reason: "single_step_reflection_followup",
+    }));
+    effectivePapers = dedupePaperRecords([...effectivePapers, ...reflectionPaperRecords]);
+    const mergedRunLog = {
+      ...(reflectionRunLogBase ?? {}),
+      reflectionStepExecuted: true,
+      reflectionStepResultCount: reflection.resultCount,
+      notes: [
+        reflectionRunLogBase?.notes,
+        `single_step_reflection result_count=${reflection.resultCount}`,
+      ]
+        .filter((item): item is string => Boolean(item && item.trim().length > 0))
+        .join(" || "),
+    };
+    effectiveRunLog = mergedRunLog;
+    effectiveKnowledgeState = {
+      ...(effectiveKnowledgeState ?? {}),
+      explorationTrace: [
+        ...(effectiveKnowledgeState?.explorationTrace ?? []),
+        ...(reflection.trace ? [reflection.trace] : []),
+      ],
+      explorationPapers: dedupeKnowledgePapers([
+        ...(effectiveKnowledgeState?.explorationPapers ?? []),
+        ...reflection.papers,
+      ]),
+      knowledgeChanges: [
+        ...(effectiveKnowledgeState?.knowledgeChanges ?? []),
+        ...(reflection.changes ?? []),
+      ],
+      runLog: mergedRunLog,
+    };
+  } else if (reflectionRunLogBase) {
+    const mergedRunLog = {
+      ...reflectionRunLogBase,
+      reflectionStepExecuted: false,
+      reflectionStepResultCount: 0,
+    };
+    effectiveRunLog = mergedRunLog;
+    effectiveKnowledgeState = {
+      ...(effectiveKnowledgeState ?? {}),
+      runLog: mergedRunLog,
+    };
+  }
+
+  const autoEvidence = applyLightweightEvidenceBinding({
+    knowledgeState: effectiveKnowledgeState,
+    runProfile: incomingRunProfile,
+  });
+  effectiveKnowledgeState = autoEvidence.knowledgeState;
+  if (autoEvidence.anchorsAdded > 0 || autoEvidence.evidenceIdsFilled > 0) {
+    effectiveRunLog = effectiveKnowledgeState?.runLog
+      ? { ...effectiveKnowledgeState.runLog }
+      : effectiveRunLog;
   }
 
   const statusRaw = normalizeText(args.status ?? "").toLowerCase();

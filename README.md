@@ -374,7 +374,9 @@ Behavior notes:
 - One-shot topic (`at ... --topic ...`) uses focused retrieval of representative papers; recurring schedules (`daily/weekly/every/cron`) use incremental tracking mode.
 - Recurring incremental mode uses candidate-pool ranking before Top-K selection; if no unseen paper is found, it runs one representative fallback pass before returning empty.
 - Default `max_papers` is 5 unless overridden by `--max-papers`.
-- Built-in quality gates for research records: core full-text coverage >= 80%, evidence-binding rate >= 90%, citation error rate < 2%. Runs failing gates are downgraded to `degraded_quality`.
+- Built-in quality gates use soft mode by default: non-fatal quality gaps are stored as warnings (`quality_gate.severity=warn`) while the run remains `ok`; only fatal issues are downgraded to `degraded_quality`.
+- Default strict recall behavior uses tiered retrieval (topic-related + broader method + adjacent cross-domain) to avoid sparse core selection on broad topics.
+- Each run executes at most one immediate reflection follow-up and writes trace/results back to `knowledge_state` for auditability.
 - Lightweight preference memory is stored backend-only (keyword/source affinities) and used to rerank future pushes quietly.
 - Incremental dedupe + memory state is persisted under `~/.openclaw/workspace/scientify/` (`literature-state.json`, `literature-push-log.jsonl`).
 - Project-level research traceability is persisted under `~/.openclaw/workspace/projects/{project-id}/knowledge_state/`.

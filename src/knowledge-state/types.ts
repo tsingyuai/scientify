@@ -1,5 +1,7 @@
 export type KnowledgeChangeType = "NEW" | "CONFIRM" | "REVISE" | "BRIDGE";
 export type RunProfile = "fast" | "strict";
+export type QualityGateMode = "soft";
+export type QualityGateSeverity = "ok" | "warn" | "fatal";
 
 export type TriggerState = {
   consecutiveNewReviseDays: number;
@@ -113,6 +115,13 @@ export type KnowledgeRunLogInput = {
   tempCleanupNote?: string;
   fullTextAttempted?: number;
   fullTextCompleted?: number;
+  recallTierStats?: {
+    tierA?: { candidates: number; selected: number };
+    tierB?: { candidates: number; selected: number };
+    tierC?: { candidates: number; selected: number };
+  };
+  reflectionStepExecuted?: boolean;
+  reflectionStepResultCount?: number;
 };
 
 export type KnowledgeStateInput = {
@@ -154,6 +163,11 @@ export type KnowledgeStateSummary = {
   recentFullTextReadCount: number;
   recentNotFullTextReadCount: number;
   qualityGate: {
+    mode: QualityGateMode;
+    severity: QualityGateSeverity;
+    warnings: string[];
+    fatalReasons: string[];
+    blocking: boolean;
     passed: boolean;
     fullTextCoveragePct: number;
     evidenceBindingRatePct: number;
@@ -197,6 +211,11 @@ export type KnowledgeStreamState = {
   recentFullTextReadCount: number;
   recentNotFullTextReadCount: number;
   lastQualityGate: {
+    mode: QualityGateMode;
+    severity: QualityGateSeverity;
+    warnings: string[];
+    fatalReasons: string[];
+    blocking: boolean;
     passed: boolean;
     fullTextCoveragePct: number;
     evidenceBindingRatePct: number;

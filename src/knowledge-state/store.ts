@@ -46,6 +46,7 @@ const MAX_HYPOTHESIS_REJECTION_REASONS = 24;
 const MIN_CORE_FULLTEXT_COVERAGE = 0.8;
 const MIN_EVIDENCE_BINDING_RATE = 0.9;
 const MAX_CITATION_ERROR_RATE = 0.02;
+const FATAL_CITATION_ERROR_RATE = 0.2;
 const MIN_FULLTEXT_PROFILE_COMPLETENESS = 0.55;
 const MIN_HYPOTHESIS_EVIDENCE = 2;
 const MIN_HYPOTHESIS_DEPENDENCY_STEPS = 2;
@@ -67,6 +68,11 @@ function defaultTriggerState(nowMs = Date.now()): TriggerState {
 }
 
 function defaultQualityGateState(): {
+  mode: "soft";
+  severity: "ok" | "warn" | "fatal";
+  warnings: string[];
+  fatalReasons: string[];
+  blocking: boolean;
   passed: boolean;
   fullTextCoveragePct: number;
   evidenceBindingRatePct: number;
@@ -74,6 +80,11 @@ function defaultQualityGateState(): {
   reasons: string[];
 } {
   return {
+    mode: "soft",
+    severity: "warn",
+    warnings: ["quality gate not evaluated"],
+    fatalReasons: [],
+    blocking: false,
     passed: false,
     fullTextCoveragePct: 0,
     evidenceBindingRatePct: 0,
@@ -245,30 +256,67 @@ async function loadState(projectPath: string): Promise<KnowledgeStateRoot> {
           rawStream.lastQualityGate &&
           typeof rawStream.lastQualityGate === "object" &&
           !Array.isArray(rawStream.lastQualityGate)
-            ? {
-                passed: rawStream.lastQualityGate.passed === true,
-                fullTextCoveragePct:
-                  typeof rawStream.lastQualityGate.fullTextCoveragePct === "number" &&
-                  Number.isFinite(rawStream.lastQualityGate.fullTextCoveragePct)
-                    ? Number(rawStream.lastQualityGate.fullTextCoveragePct.toFixed(2))
-                    : 0,
-                evidenceBindingRatePct:
-                  typeof rawStream.lastQualityGate.evidenceBindingRatePct === "number" &&
-                  Number.isFinite(rawStream.lastQualityGate.evidenceBindingRatePct)
-                    ? Number(rawStream.lastQualityGate.evidenceBindingRatePct.toFixed(2))
-                    : 0,
-                citationErrorRatePct:
-                  typeof rawStream.lastQualityGate.citationErrorRatePct === "number" &&
-                  Number.isFinite(rawStream.lastQualityGate.citationErrorRatePct)
-                    ? Number(rawStream.lastQualityGate.citationErrorRatePct.toFixed(2))
-                    : 0,
-                reasons: Array.isArray(rawStream.lastQualityGate.reasons)
+            ? (() => {
+                const reasons = Array.isArray(rawStream.lastQualityGate.reasons)
                   ? rawStream.lastQualityGate.reasons
                       .filter((item): item is string => typeof item === "string")
                       .map((item) => normalizeText(item))
                       .filter((item) => item.length > 0)
-                  : [],
-              }
+                  : [];
+                const warnings = Array.isArray(rawStream.lastQualityGate.warnings)
+                  ? rawStream.lastQualityGate.warnings
+                      .filter((item): item is string => typeof item === "string")
+                      .map((item) => normalizeText(item))
+                      .filter((item) => item.length > 0)
+                  : reasons;
+                const fatalReasons = Array.isArray(rawStream.lastQualityGate.fatalReasons)
+                  ? rawStream.lastQualityGate.fatalReasons
+                      .filter((item): item is string => typeof item === "string")
+                      .map((item) => normalizeText(item))
+                      .filter((item) => item.length > 0)
+                  : [];
+                const blocking =
+                  rawStream.lastQualityGate.blocking === true || fatalReasons.length > 0;
+                const severityRaw =
+                  typeof rawStream.lastQualityGate.severity === "string"
+                    ? rawStream.lastQualityGate.severity.toLowerCase()
+                    : undefined;
+                const severity: "ok" | "warn" | "fatal" =
+                  severityRaw === "fatal" || blocking
+                    ? "fatal"
+                    : severityRaw === "ok"
+                      ? "ok"
+                      : warnings.length > 0
+                        ? "warn"
+                        : "ok";
+                return {
+                  mode: "soft" as const,
+                  severity,
+                  warnings,
+                  fatalReasons,
+                  blocking,
+                  passed:
+                    typeof rawStream.lastQualityGate.passed === "boolean"
+                      ? rawStream.lastQualityGate.passed
+                      : fatalReasons.length === 0,
+                  fullTextCoveragePct:
+                    typeof rawStream.lastQualityGate.fullTextCoveragePct === "number" &&
+                    Number.isFinite(rawStream.lastQualityGate.fullTextCoveragePct)
+                      ? Number(rawStream.lastQualityGate.fullTextCoveragePct.toFixed(2))
+                      : 0,
+                  evidenceBindingRatePct:
+                    typeof rawStream.lastQualityGate.evidenceBindingRatePct === "number" &&
+                    Number.isFinite(rawStream.lastQualityGate.evidenceBindingRatePct)
+                      ? Number(rawStream.lastQualityGate.evidenceBindingRatePct.toFixed(2))
+                      : 0,
+                  citationErrorRatePct:
+                    typeof rawStream.lastQualityGate.citationErrorRatePct === "number" &&
+                    Number.isFinite(rawStream.lastQualityGate.citationErrorRatePct)
+                      ? Number(rawStream.lastQualityGate.citationErrorRatePct.toFixed(2))
+                      : 0,
+                  reasons: reasons.length > 0 ? reasons : [...warnings, ...fatalReasons],
+                };
+              })()
             : defaultQualityGateState(),
         lastUnreadCorePaperIds: Array.isArray(rawStream.lastUnreadCorePaperIds)
           ? rawStream.lastUnreadCorePaperIds
@@ -655,8 +703,15 @@ function applyQualityGates(args: {
   hypothesisGate: HypothesisGateSummary;
   requiredCorePapers?: number;
   requiredFullTextCoveragePct?: number;
+  hasAuditableArtifacts: boolean;
+  hasRunError: boolean;
 }): {
   qualityGate: {
+    mode: "soft";
+    severity: "ok" | "warn" | "fatal";
+    warnings: string[];
+    fatalReasons: string[];
+    blocking: boolean;
     passed: boolean;
     fullTextCoveragePct: number;
     evidenceBindingRatePct: number;
@@ -756,22 +811,26 @@ function applyQualityGates(args: {
     }
   }
 
-  const reasons: string[] = [];
-  if (
-    typeof args.requiredCorePapers === "number" &&
-    Number.isFinite(args.requiredCorePapers) &&
-    args.requiredCorePapers > 0 &&
-    coreCount < args.requiredCorePapers
-  ) {
-    reasons.push(`core_paper_count_below_required(${coreCount} < ${Math.floor(args.requiredCorePapers)})`);
+  const warnings: string[] = [];
+  const fatalReasons: string[] = [];
+  if (!args.hasAuditableArtifacts && !args.hasRunError) {
+    fatalReasons.push("no_auditable_artifacts_without_run_error");
+  }
+  if (typeof args.requiredCorePapers === "number" && Number.isFinite(args.requiredCorePapers) && args.requiredCorePapers > 0) {
+    const requiredCore = Math.floor(args.requiredCorePapers);
+    if (coreCount === 0) {
+      fatalReasons.push(`core_paper_count_below_required(${coreCount} < ${requiredCore})`);
+    } else if (coreCount < requiredCore) {
+      warnings.push(`core_paper_count_below_required(${coreCount} < ${requiredCore})`);
+    }
   }
   if (fullTextCoverage < MIN_CORE_FULLTEXT_COVERAGE) {
-    reasons.push(
+    warnings.push(
       `core_fulltext_coverage_below_threshold(${fullTextCoveragePct}% < ${Number((MIN_CORE_FULLTEXT_COVERAGE * 100).toFixed(0))}%)`,
     );
   }
   if (fullTextCorePapers.length > 0 && avgFullTextProfileCompleteness < MIN_FULLTEXT_PROFILE_COMPLETENESS) {
-    reasons.push(
+    warnings.push(
       `fulltext_profile_completeness_below_threshold(${avgFullTextProfileCompletenessPct}% < ${Number((MIN_FULLTEXT_PROFILE_COMPLETENESS * 100).toFixed(0))}%)`,
     );
   }
@@ -781,18 +840,22 @@ function applyQualityGates(args: {
     args.requiredFullTextCoveragePct > 0 &&
     fullTextCoveragePct < args.requiredFullTextCoveragePct
   ) {
-    reasons.push(
+    warnings.push(
       `core_fulltext_coverage_below_required(${fullTextCoveragePct}% < ${Number(args.requiredFullTextCoveragePct.toFixed(2))}%)`,
     );
   }
   if (evidenceBindingRate < MIN_EVIDENCE_BINDING_RATE) {
-    reasons.push(
+    warnings.push(
       `evidence_binding_rate_below_threshold(${evidenceBindingRatePct}% < ${Number((MIN_EVIDENCE_BINDING_RATE * 100).toFixed(0))}%)`,
     );
   }
-  if (citationErrorRate >= MAX_CITATION_ERROR_RATE) {
-    reasons.push(
-      `citation_error_rate_above_threshold(${citationErrorRatePct}% >= ${Number((MAX_CITATION_ERROR_RATE * 100).toFixed(0))}%)`,
+  if (citationErrorRate >= FATAL_CITATION_ERROR_RATE) {
+    fatalReasons.push(
+      `citation_error_rate_above_threshold(${citationErrorRatePct}% >= ${Number((FATAL_CITATION_ERROR_RATE * 100).toFixed(0))}%)`,
+    );
+  } else if (citationErrorRate >= MAX_CITATION_ERROR_RATE) {
+    warnings.push(
+      `citation_error_rate_above_warning_threshold(${citationErrorRatePct}% >= ${Number((MAX_CITATION_ERROR_RATE * 100).toFixed(0))}%)`,
     );
   }
   const bridgeChangeCount = args.knowledgeChanges.filter((item) => item.type === "BRIDGE").length;
@@ -800,23 +863,31 @@ function applyQualityGates(args: {
   const confirmCount = args.knowledgeChanges.filter((item) => item.type === "CONFIRM").length;
   const executedReflectionCount = args.reflectionTasks.filter((task) => task.status === "executed").length;
   if (bridgeChangeCount > 0 && executedReflectionCount === 0) {
-    reasons.push(`reflection_missing_for_bridge(bridge_count=${bridgeChangeCount})`);
+    warnings.push(`reflection_missing_for_bridge(bridge_count=${bridgeChangeCount})`);
   }
   if (reviseCount > 0 && confirmCount > 0 && executedReflectionCount === 0) {
-    reasons.push(
+    warnings.push(
       `reflection_missing_for_conflict(revise_count=${reviseCount},confirm_count=${confirmCount})`,
     );
   }
   if (args.hypothesisGate.rejected > 0 && args.hypothesisGate.accepted === 0 && args.hypotheses.length > 0) {
-    reasons.push(`hypothesis_gate_rejected_all(${args.hypothesisGate.rejected})`);
+    warnings.push(`hypothesis_gate_rejected_all(${args.hypothesisGate.rejected})`);
   }
   if (downgradedHighConfidenceCount > 0) {
-    reasons.push(`high_confidence_downgraded(${downgradedHighConfidenceCount})`);
+    warnings.push(`high_confidence_downgraded(${downgradedHighConfidenceCount})`);
   }
+  const reasons = [...warnings, ...fatalReasons];
+  const blocking = fatalReasons.length > 0;
+  const severity: "ok" | "warn" | "fatal" = blocking ? "fatal" : warnings.length > 0 ? "warn" : "ok";
 
   return {
     qualityGate: {
-      passed: reasons.length === 0,
+      mode: "soft",
+      severity,
+      warnings,
+      fatalReasons,
+      blocking,
+      passed: !blocking,
       fullTextCoveragePct,
       evidenceBindingRatePct,
       citationErrorRatePct,
@@ -1490,6 +1561,16 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
       runProfile: inferredRunProfile,
     });
     const acceptedHypotheses = hypothesisEval.acceptedHypotheses;
+    const runArtifactCount =
+      corePapers.length +
+      explorationPapers.length +
+      explorationTrace.length +
+      knowledgeChanges.length +
+      knowledgeUpdates.length +
+      submittedHypotheses.length;
+    const hasRunError = Boolean(
+      input.knowledgeState?.runLog?.error && normalizeText(input.knowledgeState.runLog.error).length > 0,
+    );
     const qualityEval = applyQualityGates({
       corePapers,
       allRunPapers: mergedRunPapers,
@@ -1501,17 +1582,24 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
       hypothesisGate: hypothesisEval.gate,
       requiredCorePapers: input.knowledgeState?.runLog?.requiredCorePapers,
       requiredFullTextCoveragePct: input.knowledgeState?.runLog?.requiredFullTextCoveragePct,
+      hasAuditableArtifacts: runArtifactCount > 0,
+      hasRunError,
     });
     if (changeSanitization.droppedBridgeCount > 0) {
-      qualityEval.qualityGate.passed = false;
+      qualityEval.qualityGate.warnings.push(
+        `bridge_dropped_due_to_ungrounded_evidence(${changeSanitization.droppedBridgeCount})`,
+      );
       qualityEval.qualityGate.reasons.push(
         `bridge_dropped_due_to_ungrounded_evidence(${changeSanitization.droppedBridgeCount})`,
       );
+      if (qualityEval.qualityGate.severity === "ok") {
+        qualityEval.qualityGate.severity = "warn";
+      }
     }
     const requestedStatus = normalizeText(input.status ?? "ok");
     const qualitySensitiveStatus = requestedStatus === "ok" || requestedStatus === "fallback_representative";
     const effectiveStatus =
-      qualitySensitiveStatus && !qualityEval.qualityGate.passed ? "degraded_quality" : requestedStatus;
+      qualitySensitiveStatus && qualityEval.qualityGate.blocking ? "degraded_quality" : requestedStatus;
 
     const topicToUpdates = new Map<string, KnowledgeUpdateInput[]>();
     for (const update of knowledgeUpdates) {

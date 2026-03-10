@@ -34,10 +34,10 @@ For high-effort strict-quality runs that are unlikely to finish in one turn, sta
 If user asks "create/start a research task now and return raw status JSON", call `scientify_cron_job` (`action=upsert`, `run_now=true`) and return the tool-provided `status_json` directly (do not synthesize JSON text).
 If current turn is already cron-triggered, never call `scientify_cron_job` again from inside that run (avoid nested cron/run_now recursion).
 When using `scientify_literature_state`, keep `scope/topic` consistent across prepare -> record -> status (reuse prepare output; do not replace scope with project id).
-If user gave hard constraints (for example exact/min core paper count), do not return status `ok` unless satisfied; otherwise persist `degraded_quality` with unmet reasons.
-If at least one paper was selected/read, never downgrade the run to `empty` only because strict gates are unmet; persist selected papers with `degraded_quality`.
-In strict profile (only when explicitly requested), do not lower `required_core_papers` below `max_papers` to force-pass quality gates. If selected papers are insufficient, broaden retrieval queries first (aliases/variants/seminal terms), then degrade if still insufficient.
-If strict constraints cannot be fully satisfied in this turn, do not refuse execution; persist a `degraded_quality` run with explicit unmet reasons.
+Soft-gate default: non-fatal quality issues should be persisted as warnings; only fatal issues should become `degraded_quality`.
+If at least one paper was selected/read, never downgrade the run to `empty` only because strict-quality warnings are unmet.
+In strict profile, do not lower `required_core_papers` below `min(3, max_papers)` to force-pass quality gates. If selected papers are insufficient, broaden retrieval queries first.
+If strict constraints cannot be fully satisfied in this turn, do not refuse execution; persist a traceable run and let quality gate severity explain risk level.
 
 ## Tool to call
 
@@ -58,7 +58,7 @@ Routing rules:
   - `max_papers` (default 5)
   - `recency_days` (optional)
   - `sources` (optional, e.g. `["arxiv","openalex"]`)
-  - `candidate_pool` (optional, default around 10)
+  - `candidate_pool` (optional, strict default 24)
   - `score_weights` (optional object with `relevance`/`novelty`/`authority`/`actionability`)
   - `project` (optional, pins persistence to a project id; otherwise uses active project or auto-generated project id)
 
@@ -104,8 +104,9 @@ For selected core papers, prefer full-text reading first:
   - evidence-binding rate >= 90% (key conclusions should be backed by section+locator+quote)
   - citation error rate < 2%
   - if full text is missing, do not keep high-confidence conclusions
+  - quality gate mode is soft by default (`severity=warn` does not block run status)
 - Reflection guardrail:
-  - when `knowledge_changes` has BRIDGE (or REVISE+CONFIRM contradiction signal), execute at least one immediate reflection query and write it into `exploration_trace`
+  - when `knowledge_changes` has BRIDGE (or NEW+REVISE signal, or unread core backlog), execute one immediate reflection query and write it into `exploration_trace`
   - do not emit BRIDGE unless `evidence_ids` resolve to this run's papers and include at least one full-text-backed paper
 - Hypothesis gate:
   - avoid speculative guesses; each hypothesis should include >=2 `evidence_ids`, `dependency_path` length >=2, and novelty/feasibility/impact scores

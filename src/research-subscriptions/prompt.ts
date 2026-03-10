@@ -152,7 +152,7 @@ export function buildScheduledTaskMessage(
   const candidatePoolBase = resolveCandidatePool(options.candidatePool, preferences.max_papers);
   const candidatePool =
     runProfile === "strict"
-      ? Math.max(candidatePoolBase, Math.min(40, Math.max(20, preferences.max_papers * 4)))
+      ? Math.max(candidatePoolBase, Math.min(40, Math.max(24, preferences.max_papers * 4)))
       : candidatePoolBase;
   const scoreWeights = options.scoreWeights ?? DEFAULT_SCORE_WEIGHTS;
   const scoreWeightsText = formatScoreWeights(scoreWeights);
@@ -264,11 +264,13 @@ export function buildScheduledTaskMessage(
       "   - If trigger signals are present (e.g. NEW>=2, or NEW+REVISE>=2, or BRIDGE present), propose 1 grounded hypothesis with >=2 evidence_ids and dependency_path>=2",
       "6) Persist once via `scientify_literature_state.record` using MINIMAL JSON only:",
       `${recordTemplate}`,
-      "7) If papers exist but quality is partial, persist `degraded_quality` (do not skip record):",
+      "7) Soft-gate default: non-fatal quality gaps should keep status=`ok` and be reported as warnings in quality_gate.",
+      "8) Execute one immediate reflection follow-up when trigger signals exist (BRIDGE, NEW+REVISE, unread core), and write trace/results back into knowledge_state.",
+      "9) Use `degraded_quality` only for fatal gate issues (do not skip record):",
       `${recordDegradedTemplate}`,
-      "8) Use `empty` only when no paper is selected after both primary and broadened fallback retrieval:",
+      "10) Use `empty` only when no paper is selected after both primary and broadened fallback retrieval:",
       `${recordEmptyTemplate}`,
-      "9) After record, call status and include `run_id`/`latest_run_id`.",
+      "11) After record, call status and include `run_id`/`latest_run_id`.",
       "Never write placeholders like 'not provided'/'N/A' in core_papers fields. If unavailable, omit the field or set unread_reason.",
       "Do not output large JSON to users; JSON is for tool call only.",
     ].join("\n");
@@ -298,11 +300,13 @@ export function buildScheduledTaskMessage(
     "   - If trigger signals are present (e.g. NEW>=2, or NEW+REVISE>=2, or BRIDGE present), propose 1 grounded hypothesis with >=2 evidence_ids and dependency_path>=2",
     "7) Persist once via `scientify_literature_state.record` using MINIMAL JSON only:",
     `${recordTemplate}`,
-    "8) If papers exist but quality is partial, persist `degraded_quality` (do not skip record):",
+    "8) Soft-gate default: non-fatal quality gaps should keep status=`ok` and be reported as warnings in quality_gate.",
+    "9) Execute one immediate reflection follow-up when trigger signals exist (BRIDGE, NEW+REVISE, unread core), and write trace/results back into knowledge_state.",
+    "10) Use `degraded_quality` only for fatal gate issues (do not skip record):",
     `${recordDegradedTemplate}`,
-    "9) If both incremental and broadened fallback passes are empty, persist empty:",
+    "11) If both incremental and broadened fallback passes are empty, persist empty:",
     `${recordEmptyTemplate}`,
-    "10) After record, call status and include `run_id`/`latest_run_id` for traceability.",
+    "12) After record, call status and include `run_id`/`latest_run_id` for traceability.",
     "Never write placeholders like 'not provided'/'N/A' in core_papers fields. If unavailable, omit the field or set unread_reason.",
     "Do not output large JSON to users; JSON is for tool call only.",
   ].join("\n");
