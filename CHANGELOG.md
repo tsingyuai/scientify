@@ -1,3 +1,9 @@
+## [1.13.5](https://github.com/tsingyuai/scientify/compare/v1.13.4...v1.13.5) (2026-03-10)
+
+### Documentation
+
+* align EN/ZH docs with hypothesis-gated response and soft-gate behavior ([b07e4d6](https://github.com/tsingyuai/scientify/commit/b07e4d604624541232eda5e7d9f6137e03aa2b31))
+
 ## [1.13.4](https://github.com/tsingyuai/scientify/compare/v1.13.3...v1.13.4) (2026-03-10)
 
 ### Documentation
