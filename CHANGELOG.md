@@ -1,3 +1,9 @@
+## [1.13.0](https://github.com/tsingyuai/scientify/compare/v1.12.2...v1.13.0) (2026-03-10)
+
+### Features
+
+* adopt soft quality gates with tiered recall and reflection closure ([0112a4c](https://github.com/tsingyuai/scientify/commit/0112a4c2b94c89ecf1ba07876a0aa5b881b945c5))
+
 ## [1.12.2](https://github.com/tsingyuai/scientify/compare/v1.12.1...v1.12.2) (2026-03-10)
 
 ### Bug Fixes
