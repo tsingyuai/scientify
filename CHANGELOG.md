@@ -1,3 +1,9 @@
+## [1.12.2](https://github.com/tsingyuai/scientify/compare/v1.12.1...v1.12.2) (2026-03-10)
+
+### Bug Fixes
+
+* stabilize strict runs with generic core backfill ([1706ce8](https://github.com/tsingyuai/scientify/commit/1706ce801c8c400ef31cfabf033971ec8f4fb29a))
+
 ## [1.12.1](https://github.com/tsingyuai/scientify/compare/v1.12.0...v1.12.1) (2026-03-09)
 
 ### Bug Fixes
