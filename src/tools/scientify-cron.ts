@@ -353,6 +353,19 @@ function hasFreshRun(before: IncrementalStatus | undefined, after: IncrementalSt
   return false;
 }
 
+function uniqueScopeCandidates(candidates: Array<string | undefined>): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const normalized = normalizeScope(candidate);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
 function buildFallbackRunId(jobId: string): string {
   const ts = new Date().toISOString().replace(/[-:.]/g, "").replace("T", "t").replace("Z", "z");
   return `cron-${jobId}-${ts}-autofallback`;
@@ -607,15 +620,18 @@ export function createScientifyCronTool(deps: CronToolDeps) {
           const project = readStringParam(upsertParams, "project");
           const runNow = readBooleanParam(upsertParams, "run_now");
           if (runNow && jobId) {
-            const statusScope = expectedStateScopeKey ?? incrementalScope ?? scope;
-            const beforeStatus =
-              resolved.topic
-                ? await getIncrementalStateStatus({
-                    scope: statusScope,
-                    topic: resolved.topic,
-                    ...(project ? { projectId: project } : {}),
-                  }).catch(() => undefined)
-                : undefined;
+            const statusScopeCandidates = uniqueScopeCandidates([expectedStateScopeKey, incrementalScope, scope]);
+            const beforeStatusByScope = new Map<string, IncrementalStatus | undefined>();
+            if (resolved.topic) {
+              for (const statusScope of statusScopeCandidates) {
+                const before = await getIncrementalStateStatus({
+                  scope: statusScope,
+                  topic: resolved.topic,
+                  ...(project ? { projectId: project } : {}),
+                }).catch(() => undefined);
+                beforeStatusByScope.set(statusScope, before);
+              }
+            }
 
             const runArgsPrimary = [
               "openclaw",
@@ -657,15 +673,23 @@ export function createScientifyCronTool(deps: CronToolDeps) {
             if (resolved.topic) {
               try {
                 let status: IncrementalStatus | undefined;
+                let statusScopeUsed: string | undefined;
                 const deadline = Date.now() + (runAlreadyInProgress ? 300_000 : 120_000);
                 while (Date.now() <= deadline) {
-                  const fetched = await getIncrementalStateStatus({
-                    scope: statusScope,
-                    topic: resolved.topic,
-                    ...(project ? { projectId: project } : {}),
-                  }).catch(() => undefined);
-                  if (fetched && hasFreshRun(beforeStatus, fetched)) {
-                    status = fetched;
+                  for (const statusScope of statusScopeCandidates) {
+                    const fetched = await getIncrementalStateStatus({
+                      scope: statusScope,
+                      topic: resolved.topic,
+                      ...(project ? { projectId: project } : {}),
+                    }).catch(() => undefined);
+                    const before = beforeStatusByScope.get(statusScope);
+                    if (fetched && hasFreshRun(before, fetched)) {
+                      status = fetched;
+                      statusScopeUsed = statusScope;
+                      break;
+                    }
+                  }
+                  if (status) {
                     break;
                   }
                   await sleep(1_000);
@@ -674,42 +698,57 @@ export function createScientifyCronTool(deps: CronToolDeps) {
                   const fallbackError =
                     "run_now completed but no new persisted research run was detected. Auto-persisted fallback error run.";
                   try {
-                    const persisted = await recordIncrementalPush({
-                      scope: statusScope,
-                      topic: resolved.topic,
-                      ...(project ? { projectId: project } : {}),
-                      status: "degraded_quality",
-                      runId: buildFallbackRunId(jobId),
-                      note: fallbackError,
-                      papers: [],
-                      knowledgeState: {
-                        corePapers: [],
-                        explorationPapers: [],
-                        explorationTrace: [],
-                        knowledgeChanges: [],
-                        knowledgeUpdates: [],
-                        hypotheses: [],
-                        runLog: {
-                          runProfile: readBooleanParam(upsertParams, "metadata_only") ? "fast" : "strict",
-                          error:
-                            "run_now completed but the agent turn did not persist via scientify_literature_state.record",
-                          notes:
-                            "Fallback persisted by scientify_cron_job guard to avoid stale status response.",
-                          tempCleanupStatus: "not_needed",
+                    const fallbackPersistErrors: string[] = [];
+                    for (const [idx, statusScope] of statusScopeCandidates.entries()) {
+                      const persisted = await recordIncrementalPush({
+                        scope: statusScope,
+                        topic: resolved.topic,
+                        ...(project ? { projectId: project } : {}),
+                        status: "error",
+                        runId: `${buildFallbackRunId(jobId)}-${idx + 1}`,
+                        note: fallbackError,
+                        papers: [],
+                        knowledgeState: {
+                          corePapers: [],
+                          explorationPapers: [],
+                          explorationTrace: [],
+                          knowledgeChanges: [],
+                          knowledgeUpdates: [],
+                          hypotheses: [],
+                          runLog: {
+                            runProfile: readBooleanParam(upsertParams, "metadata_only") ? "fast" : "strict",
+                            error:
+                              "run_now completed but the agent turn did not persist via scientify_literature_state.record",
+                            notes:
+                              "Fallback persisted by scientify_cron_job guard to avoid stale status response.",
+                            tempCleanupStatus: "not_needed",
+                          },
                         },
-                      },
-                    });
+                      }).catch((persistError) => {
+                        fallbackPersistErrors.push(
+                          `${statusScope}:${persistError instanceof Error ? persistError.message : String(persistError)}`,
+                        );
+                        return undefined;
+                      });
+                      if (!persisted) continue;
 
-                    status = await getIncrementalStateStatus({
-                      scope: statusScope,
-                      topic: resolved.topic,
-                      ...(project ? { projectId: project } : {}),
-                    }).catch(() => undefined);
+                      const fetched = await getIncrementalStateStatus({
+                        scope: statusScope,
+                        topic: resolved.topic,
+                        ...(project ? { projectId: project } : {}),
+                      }).catch(() => undefined);
+                      const before = beforeStatusByScope.get(statusScope);
+                      if (fetched && hasFreshRun(before, fetched)) {
+                        status = fetched;
+                        statusScopeUsed = statusScope;
+                        break;
+                      }
+                    }
 
-                    if (!status || !hasFreshRun(beforeStatus, status)) {
+                    if (!status) {
                       return Result.err(
                         "operation_failed",
-                        `${fallbackError} fallback_run_id=${persisted.runId}, but fresh status still unavailable.`,
+                        `${fallbackError} fresh_status_unavailable_after_fallback_persist. scopes=${statusScopeCandidates.join(",")} errors=${fallbackPersistErrors.join(" | ") || "none"}`,
                       );
                     }
                   } catch (persistError) {
@@ -719,7 +758,10 @@ export function createScientifyCronTool(deps: CronToolDeps) {
                     );
                   }
                 }
-                statusSnapshot = serializeRunStatusSnapshot(status);
+                statusSnapshot = {
+                  ...serializeRunStatusSnapshot(status),
+                  status_scope_used: statusScopeUsed ?? null,
+                };
               } catch (statusError) {
                 statusSnapshot = {
                   error:

@@ -65,6 +65,10 @@ Research quality and gating:
   - BRIDGE requires resolvable evidence_ids and at least one full-text-backed evidence source.
   - If BRIDGE, NEW+REVISE, or unread core backlog appears, execute one reflection follow-up query and persist trace/result.
   - Hypotheses are accepted only when evidence_ids and dependency_path are sufficient; otherwise reject via hypothesis_gate reasons.
+  - Before user-facing wording, check latest status.hypothesis_gate.accepted:
+    * accepted == 0: factual report only; do not output speculative "next high-value routes"/"deep dive" guidance.
+    * accepted > 0: include hypothesis details in current message by default (stable path).
+    * only when runtime/channel clearly supports multi-send, split into two consecutive messages (alert then detailed hypothesis).
   - If hard user constraints are not met (for example min core papers), do not report status=ok.
 
 Traceability:
