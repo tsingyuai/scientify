@@ -1,3 +1,9 @@
+## [1.13.1](https://github.com/tsingyuai/scientify/compare/v1.13.0...v1.13.1) (2026-03-10)
+
+### Bug Fixes
+
+* improve core paper recall and status traceability ([4e305fc](https://github.com/tsingyuai/scientify/commit/4e305fcc823271d5337f9eaa22f8ff23943e63a4))
+
 ## [1.13.0](https://github.com/tsingyuai/scientify/compare/v1.12.2...v1.13.0) (2026-03-10)
 
 ### Features
