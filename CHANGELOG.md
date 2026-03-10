@@ -1,3 +1,9 @@
+## [1.13.2](https://github.com/tsingyuai/scientify/compare/v1.13.1...v1.13.2) (2026-03-10)
+
+### Bug Fixes
+
+* enforce high-quality hypothesis gate with executable plans and strict evaluation ([7669868](https://github.com/tsingyuai/scientify/commit/7669868fe765a03458b05e3acc195b5bad093781))
+
 ## [1.13.1](https://github.com/tsingyuai/scientify/compare/v1.13.0...v1.13.1) (2026-03-10)
 
 ### Bug Fixes
