@@ -130,6 +130,26 @@ const KnowledgeHypothesisSchema = Type.Object({
   statement: Type.String({ description: "Hypothesis statement." }),
   trigger: Type.String({ description: "Trigger type: GAP|BRIDGE|TREND|CONTRADICTION." }),
   dependency_path: Type.Optional(Type.Array(Type.String({ description: "Dependency path steps." }))),
+  strengths: Type.Optional(
+    Type.Array(Type.String({ description: "Hypothesis strengths based on current evidence." })),
+  ),
+  weaknesses: Type.Optional(
+    Type.Array(Type.String({ description: "Hypothesis weaknesses, risks, or uncertainty points." })),
+  ),
+  plan_steps: Type.Optional(
+    Type.Array(Type.String({ description: "Actionable research plan steps for execution." })),
+  ),
+  strict_evaluation: Type.Optional(
+    Type.Object({
+      overall_score: Type.Optional(Type.Number({ description: "Strict overall score (0-100)." })),
+      decision: Type.Optional(
+        Type.String({
+          description: "Strict decision: accept | revise | reject.",
+        }),
+      ),
+      reason: Type.Optional(Type.String({ description: "Why this decision is made." })),
+    }),
+  ),
   novelty: Type.Optional(Type.Number({ description: "Optional novelty score." })),
   feasibility: Type.Optional(Type.Number({ description: "Optional feasibility score." })),
   impact: Type.Optional(Type.Number({ description: "Optional impact score." })),
@@ -769,6 +789,52 @@ function readKnowledgeStatePayload(params: Record<string, unknown>): KnowledgeSt
             .map((v) => v.trim())
             .filter((v) => v.length > 0)
         : undefined;
+      const strengthsRaw = row.strengths;
+      const strengths = Array.isArray(strengthsRaw)
+        ? strengthsRaw
+            .filter((v): v is string => typeof v === "string")
+            .map((v) => v.trim())
+            .filter((v) => v.length > 0)
+        : undefined;
+      const weaknessesRaw = row.weaknesses;
+      const weaknesses = Array.isArray(weaknessesRaw)
+        ? weaknessesRaw
+            .filter((v): v is string => typeof v === "string")
+            .map((v) => v.trim())
+            .filter((v) => v.length > 0)
+        : undefined;
+      const planStepsRaw = row.plan_steps ?? row.planSteps;
+      const planSteps = Array.isArray(planStepsRaw)
+        ? planStepsRaw
+            .filter((v): v is string => typeof v === "string")
+            .map((v) => v.trim())
+            .filter((v) => v.length > 0)
+        : undefined;
+      const strictEvaluationRaw = row.strict_evaluation ?? row.strictEvaluation;
+      const strictEvaluation =
+        strictEvaluationRaw && typeof strictEvaluationRaw === "object" && !Array.isArray(strictEvaluationRaw)
+          ? (() => {
+              const evalRow = strictEvaluationRaw as Record<string, unknown>;
+              const overallScoreRaw = evalRow.overall_score ?? evalRow.overallScore;
+              const overallScore =
+                typeof overallScoreRaw === "number" && Number.isFinite(overallScoreRaw)
+                  ? Math.max(0, Math.min(100, Number(overallScoreRaw.toFixed(2))))
+                  : undefined;
+              const decisionRaw =
+                typeof evalRow.decision === "string" ? String(evalRow.decision).trim().toLowerCase() : undefined;
+              const decision =
+                decisionRaw === "accept" || decisionRaw === "revise" || decisionRaw === "reject"
+                  ? (decisionRaw as "accept" | "revise" | "reject")
+                  : undefined;
+              const reason = typeof evalRow.reason === "string" ? evalRow.reason.trim() : undefined;
+              if (overallScore === undefined && !decision && !reason) return undefined;
+              return {
+                ...(overallScore !== undefined ? { overallScore } : {}),
+                ...(decision ? { decision } : {}),
+                ...(reason ? { reason } : {}),
+              };
+            })()
+          : undefined;
       const evidenceRaw = row.evidence_ids ?? row.evidenceIds;
       const evidenceIds = Array.isArray(evidenceRaw)
         ? evidenceRaw
@@ -812,6 +878,10 @@ function readKnowledgeStatePayload(params: Record<string, unknown>): KnowledgeSt
         statement,
         trigger,
         ...(dependencyPath && dependencyPath.length > 0 ? { dependencyPath } : {}),
+        ...(strengths && strengths.length > 0 ? { strengths } : {}),
+        ...(weaknesses && weaknesses.length > 0 ? { weaknesses } : {}),
+        ...(planSteps && planSteps.length > 0 ? { planSteps } : {}),
+        ...(strictEvaluation ? { strictEvaluation } : {}),
         ...(evidenceIds && evidenceIds.length > 0 ? { evidenceIds } : {}),
         ...(validationStatus ? { validationStatus } : {}),
         ...(validationNotes ? { validationNotes } : {}),
@@ -1358,6 +1428,9 @@ export function createScientifyLiteratureStateTool() {
               trigger: item.trigger,
               created_at_ms: item.createdAtMs,
               file: item.file,
+              strict_overall_score:
+                typeof item.strictOverallScore === "number" ? item.strictOverallScore : null,
+              strict_decision: item.strictDecision ?? null,
             })),
             recent_change_stats: status.recentChangeStats.map((item) => ({
               day: item.day,

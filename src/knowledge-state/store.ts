@@ -51,6 +51,11 @@ const MIN_FULLTEXT_PROFILE_COMPLETENESS = 0.55;
 const MIN_HYPOTHESIS_EVIDENCE = 2;
 const MIN_HYPOTHESIS_DEPENDENCY_STEPS = 2;
 const MIN_HYPOTHESIS_STATEMENT_CHARS = 48;
+const MIN_HYPOTHESIS_STRENGTHS = 2;
+const MIN_HYPOTHESIS_WEAKNESSES = 2;
+const MIN_HYPOTHESIS_PLAN_STEPS = 3;
+const MIN_HYPOTHESIS_STRICT_ACCEPT_SCORE = 70;
+const MIN_HYPOTHESIS_ACCEPT_SELF_SCORE_AVG = 3.2;
 const PLACEHOLDER_TEXT_RE =
   /^(?:n\/a|na|none|not provided|not available|unknown|tbd|todo|null|nil|未提供|暂无|未知|无)$/iu;
 
@@ -342,7 +347,24 @@ async function loadState(projectPath: string): Promise<KnowledgeStateRoot> {
         recentHypotheses: Array.isArray(rawStream.recentHypotheses)
           ? rawStream.recentHypotheses.filter(
               (item): item is KnowledgeStreamState["recentHypotheses"][number] => !!item && typeof item === "object",
-            )
+            ).map((item) => ({
+              id: sanitizeId(item.id ?? "hyp"),
+              statement: normalizeText(item.statement ?? ""),
+              trigger: ["GAP", "BRIDGE", "TREND", "CONTRADICTION"].includes(item.trigger)
+                ? item.trigger
+                : "TREND",
+              createdAtMs:
+                typeof item.createdAtMs === "number" && Number.isFinite(item.createdAtMs)
+                  ? item.createdAtMs
+                  : Date.now(),
+              file: normalizeText(item.file ?? ""),
+              ...(typeof item.strictOverallScore === "number" && Number.isFinite(item.strictOverallScore)
+                ? { strictOverallScore: Number(item.strictOverallScore.toFixed(2)) }
+                : {}),
+              ...(item.strictDecision === "accept" || item.strictDecision === "revise" || item.strictDecision === "reject"
+                ? { strictDecision: item.strictDecision }
+                : {}),
+            })).filter((item) => item.statement.length > 0 && item.file.length > 0)
           : [],
         recentChangeStats: Array.isArray(rawStream.recentChangeStats)
           ? rawStream.recentChangeStats.filter(
@@ -959,6 +981,31 @@ function normalizeHypothesis(input: KnowledgeHypothesisInput): KnowledgeHypothes
       : undefined;
   const validationEvidence = normalizeStringArray(input.validationEvidence);
   const validationNotes = input.validationNotes ? normalizeText(input.validationNotes) : undefined;
+  const strengths = normalizeStringArray(input.strengths);
+  const weaknesses = normalizeStringArray(input.weaknesses);
+  const planSteps = normalizeStringArray(input.planSteps);
+  const strictEvaluationRaw = input.strictEvaluation;
+  const strictEvaluation =
+    strictEvaluationRaw && typeof strictEvaluationRaw === "object"
+      ? (() => {
+          const overallScore =
+            typeof strictEvaluationRaw.overallScore === "number" && Number.isFinite(strictEvaluationRaw.overallScore)
+              ? Math.max(0, Math.min(100, Number(strictEvaluationRaw.overallScore.toFixed(2))))
+              : undefined;
+          const decisionRaw = strictEvaluationRaw.decision?.trim().toLowerCase();
+          const decision =
+            decisionRaw === "accept" || decisionRaw === "revise" || decisionRaw === "reject"
+              ? (decisionRaw as "accept" | "revise" | "reject")
+              : undefined;
+          const reason = strictEvaluationRaw.reason ? normalizeText(strictEvaluationRaw.reason) : undefined;
+          if (overallScore === undefined && !decision && !reason) return undefined;
+          return {
+            ...(overallScore !== undefined ? { overallScore } : {}),
+            ...(decision ? { decision } : {}),
+            ...(reason ? { reason } : {}),
+          };
+        })()
+      : undefined;
 
   const withScore = (value: unknown): number | undefined =>
     typeof value === "number" && Number.isFinite(value) ? Number(value.toFixed(2)) : undefined;
@@ -968,6 +1015,10 @@ function normalizeHypothesis(input: KnowledgeHypothesisInput): KnowledgeHypothes
     statement,
     trigger,
     ...(dependencyPath && dependencyPath.length > 0 ? { dependencyPath } : {}),
+    ...(strengths ? { strengths } : {}),
+    ...(weaknesses ? { weaknesses } : {}),
+    ...(planSteps ? { planSteps } : {}),
+    ...(strictEvaluation ? { strictEvaluation } : {}),
     ...(typeof withScore(input.novelty) === "number" ? { novelty: withScore(input.novelty) } : {}),
     ...(typeof withScore(input.feasibility) === "number" ? { feasibility: withScore(input.feasibility) } : {}),
     ...(typeof withScore(input.impact) === "number" ? { impact: withScore(input.impact) } : {}),
@@ -1284,12 +1335,63 @@ function applyHypothesisGate(args: {
       );
     }
 
+    const strengthsCount = hypothesis.strengths?.length ?? 0;
+    if (strengthsCount < MIN_HYPOTHESIS_STRENGTHS) {
+      reasons.push(`strengths_too_few(${strengthsCount}<${MIN_HYPOTHESIS_STRENGTHS})`);
+    }
+    const weaknessesCount = hypothesis.weaknesses?.length ?? 0;
+    if (weaknessesCount < MIN_HYPOTHESIS_WEAKNESSES) {
+      reasons.push(`weaknesses_too_few(${weaknessesCount}<${MIN_HYPOTHESIS_WEAKNESSES})`);
+    }
+    const planStepCount = hypothesis.planSteps?.length ?? 0;
+    if (planStepCount < MIN_HYPOTHESIS_PLAN_STEPS) {
+      reasons.push(`plan_steps_too_few(${planStepCount}<${MIN_HYPOTHESIS_PLAN_STEPS})`);
+    }
+
     const hasScore =
       typeof hypothesis.novelty === "number" &&
       typeof hypothesis.feasibility === "number" &&
       typeof hypothesis.impact === "number";
     if (!hasScore) {
       reasons.push("missing_self_assessment_scores");
+    }
+
+    const strictEval = hypothesis.strictEvaluation;
+    if (!strictEval) {
+      reasons.push("missing_strict_evaluation");
+    } else {
+      if (typeof strictEval.overallScore !== "number" || !Number.isFinite(strictEval.overallScore)) {
+        reasons.push("strict_evaluation_missing_overall_score");
+      }
+      if (!strictEval.decision) {
+        reasons.push("strict_evaluation_missing_decision");
+      } else if (strictEval.decision !== "accept") {
+        reasons.push(`strict_evaluation_not_accept(${strictEval.decision})`);
+      }
+      if (!strictEval.reason || normalizeText(strictEval.reason).length < 16) {
+        reasons.push("strict_evaluation_reason_too_short");
+      }
+      if (
+        strictEval.decision === "accept" &&
+        typeof strictEval.overallScore === "number" &&
+        strictEval.overallScore < MIN_HYPOTHESIS_STRICT_ACCEPT_SCORE
+      ) {
+        reasons.push(
+          `strict_evaluation_score_below_threshold(${strictEval.overallScore}<${MIN_HYPOTHESIS_STRICT_ACCEPT_SCORE})`,
+        );
+      }
+    }
+    if (
+      hasScore &&
+      strictEval?.decision === "accept" &&
+      ((hypothesis.novelty ?? 0) + (hypothesis.feasibility ?? 0) + (hypothesis.impact ?? 0)) / 3 <
+        MIN_HYPOTHESIS_ACCEPT_SELF_SCORE_AVG
+    ) {
+      reasons.push(
+        `self_assessment_avg_below_accept_threshold(${Number(
+          (((hypothesis.novelty ?? 0) + (hypothesis.feasibility ?? 0) + (hypothesis.impact ?? 0)) / 3).toFixed(2),
+        )}<${MIN_HYPOTHESIS_ACCEPT_SELF_SCORE_AVG})`,
+      );
     }
 
     if (hypothesis.trigger === "BRIDGE" && changeCounts.BRIDGE === 0) {
@@ -1661,6 +1763,12 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
         trigger: hypothesis.trigger,
         createdAtMs: nowMs,
         file,
+        ...(typeof hypothesis.strictEvaluation?.overallScore === "number"
+          ? { strictOverallScore: hypothesis.strictEvaluation.overallScore }
+          : {}),
+        ...(hypothesis.strictEvaluation?.decision
+          ? { strictDecision: hypothesis.strictEvaluation.decision }
+          : {}),
       });
     }
 

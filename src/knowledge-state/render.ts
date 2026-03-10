@@ -429,6 +429,21 @@ export function renderHypothesisMarkdown(args: {
       ? args.hypothesis.dependencyPath.map((step, idx) => `${idx + 1}. ${step}`)
       : ["- Pending enrichment: dependency path not extracted in this run."]),
     "",
+    "## Strengths",
+    ...(args.hypothesis.strengths && args.hypothesis.strengths.length > 0
+      ? args.hypothesis.strengths.map((item, idx) => `${idx + 1}. ${item}`)
+      : ["1. (none)"]),
+    "",
+    "## Weaknesses",
+    ...(args.hypothesis.weaknesses && args.hypothesis.weaknesses.length > 0
+      ? args.hypothesis.weaknesses.map((item, idx) => `${idx + 1}. ${item}`)
+      : ["1. (none)"]),
+    "",
+    "## Research Plan",
+    ...(args.hypothesis.planSteps && args.hypothesis.planSteps.length > 0
+      ? args.hypothesis.planSteps.map((step, idx) => `${idx + 1}. ${step}`)
+      : ["1. (none)"]),
+    "",
     "## Evidence IDs",
     ...(args.hypothesis.evidenceIds && args.hypothesis.evidenceIds.length > 0
       ? args.hypothesis.evidenceIds.map((id, idx) => `${idx + 1}. ${id}`)
@@ -448,6 +463,17 @@ export function renderHypothesisMarkdown(args: {
     `- Novelty: ${novelty}`,
     `- Feasibility: ${feasibility}`,
     `- Impact: ${impact}`,
+    ...(args.hypothesis.strictEvaluation
+      ? [
+          `- Strict overall score: ${typeof args.hypothesis.strictEvaluation.overallScore === "number" ? args.hypothesis.strictEvaluation.overallScore : "pending"}`,
+          `- Strict decision: ${args.hypothesis.strictEvaluation.decision ?? "pending"}`,
+          `- Strict reason: ${args.hypothesis.strictEvaluation.reason ?? "pending"}`,
+        ]
+      : [
+          "- Strict overall score: pending",
+          "- Strict decision: pending",
+          "- Strict reason: pending",
+        ]),
     "",
   ];
 

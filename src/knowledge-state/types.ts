@@ -91,6 +91,14 @@ export type KnowledgeHypothesisInput = {
   statement: string;
   trigger: "GAP" | "BRIDGE" | "TREND" | "CONTRADICTION";
   dependencyPath?: string[];
+  strengths?: string[];
+  weaknesses?: string[];
+  planSteps?: string[];
+  strictEvaluation?: {
+    overallScore?: number;
+    decision?: "accept" | "revise" | "reject";
+    reason?: string;
+  };
   novelty?: number;
   feasibility?: number;
   impact?: number;
@@ -140,6 +148,8 @@ export type RecentHypothesisSummary = {
   trigger: KnowledgeHypothesisInput["trigger"];
   createdAtMs: number;
   file: string;
+  strictOverallScore?: number;
+  strictDecision?: "accept" | "revise" | "reject";
 };
 
 export type RecentChangeStat = {
