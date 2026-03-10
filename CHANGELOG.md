@@ -1,3 +1,9 @@
+## [1.13.3](https://github.com/tsingyuai/scientify/compare/v1.13.2...v1.13.3) (2026-03-10)
+
+### Bug Fixes
+
+* gate hypothesis push format and suppress speculative guidance when no accepted hypothesis ([438dbc9](https://github.com/tsingyuai/scientify/commit/438dbc92f20f2b94593e33a4e55ec4ef67432c32))
+
 ## [1.13.2](https://github.com/tsingyuai/scientify/compare/v1.13.1...v1.13.2) (2026-03-10)
 
 ### Bug Fixes
