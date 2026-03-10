@@ -1,4 +1,12 @@
 export type KnowledgeChangeType = "NEW" | "CONFIRM" | "REVISE" | "BRIDGE";
+export type RunProfile = "fast" | "strict";
+
+export type TriggerState = {
+  consecutiveNewReviseDays: number;
+  bridgeCount7d: number;
+  unreadCoreBacklog: number;
+  lastUpdatedAtMs: number;
+};
 
 export type PaperEvidenceAnchorInput = {
   section?: string;
@@ -96,6 +104,7 @@ export type KnowledgeRunLogInput = {
   error?: string;
   degraded?: boolean;
   notes?: string;
+  runProfile?: RunProfile;
   requiredCorePapers?: number;
   requiredFullTextCoveragePct?: number;
   tempFullTextDir?: string;
@@ -136,10 +145,12 @@ export type RecentChangeStat = {
 export type KnowledgeStateSummary = {
   projectId: string;
   streamKey: string;
+  runProfile: RunProfile;
   totalRuns: number;
   totalHypotheses: number;
   knowledgeTopicsCount: number;
   paperNotesCount: number;
+  triggerState: TriggerState;
   recentFullTextReadCount: number;
   recentNotFullTextReadCount: number;
   qualityGate: {
@@ -177,10 +188,12 @@ export type KnowledgeStreamState = {
   topic: string;
   topicKey: string;
   projectId: string;
+  lastRunProfile: RunProfile;
   totalRuns: number;
   totalHypotheses: number;
   knowledgeTopics: string[];
   paperNotes: string[];
+  triggerState: TriggerState;
   recentFullTextReadCount: number;
   recentNotFullTextReadCount: number;
   lastQualityGate: {

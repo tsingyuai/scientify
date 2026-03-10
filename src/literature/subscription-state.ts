@@ -3,7 +3,12 @@ import { mkdir, readFile, rename, writeFile, appendFile } from "node:fs/promises
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { commitKnowledgeRun, readKnowledgeSummary } from "../knowledge-state/store.js";
-import type { KnowledgeStateInput, KnowledgeStateSummary } from "../knowledge-state/types.js";
+import type {
+  ExplorationTraceInput,
+  KnowledgePaperInput,
+  KnowledgeStateInput,
+  KnowledgeStateSummary,
+} from "../knowledge-state/types.js";
 
 export type LightweightPreferences = {
   maxPapers: number;
@@ -142,6 +147,13 @@ const DEFAULT_SOURCES = ["openalex", "arxiv"];
 const MAX_MEMORY_NOTES = 30;
 const MAX_MEMORY_KEYS = 60;
 const TOP_HINT_LIMIT = 8;
+const DEFAULT_FULLTEXT_FETCH_TIMEOUT_MS = 20_000;
+const RETRY_FULLTEXT_FETCH_TIMEOUT_MS = 35_000;
+const MIN_FULLTEXT_TEXT_CHARS = 2_000;
+const MAX_STRICT_FULLTEXT_ATTEMPTS = 5;
+const ARXIV_API_URL = "https://export.arxiv.org/api/query";
+const STRICT_EMPTY_FALLBACK_MAX_RESULTS = 12;
+const STRICT_EMPTY_FALLBACK_MAX_QUERIES = 4;
 
 const FEEDBACK_SIGNAL_DELTA: Record<FeedbackSignal, number> = {
   read: 1,
@@ -323,6 +335,236 @@ function derivePaperId(paper: PaperRecordInput): string {
   return `hash:${digest.slice(0, 20)}`;
 }
 
+function normalizeArxivToken(token: string): string | undefined {
+  const cleaned = normalizeText(token).replace(/^arxiv:/i, "");
+  if (!cleaned) return undefined;
+  const modern = cleaned.match(/^(\d{4}\.\d{4,5}(?:v\d+)?)$/i);
+  if (modern?.[1]) return modern[1].toLowerCase();
+  const legacy = cleaned.match(/^([a-z\-]+(?:\.[a-z\-]+)?\/\d{7}(?:v\d+)?)$/i);
+  if (legacy?.[1]) return legacy[1].toLowerCase();
+  return undefined;
+}
+
+function stripArxivVersion(id: string): string {
+  return id.replace(/v\d+$/i, "");
+}
+
+function parseArxivIdCandidatesFromPaper(paper: { id?: string; url?: string; title?: string }): string[] {
+  const candidates: string[] = [];
+  const pushToken = (value?: string) => {
+    if (!value) return;
+    const normalized = normalizeArxivToken(value);
+    if (normalized) candidates.push(normalized);
+  };
+
+  pushToken(paper.id);
+
+  const combined = [paper.url, paper.title].filter((item): item is string => Boolean(item)).join(" ");
+  for (const m of combined.matchAll(/\b(\d{4}\.\d{4,5}(?:v\d+)?)\b/gi)) {
+    pushToken(m[1]);
+  }
+  for (const m of combined.matchAll(/\b([a-z\-]+(?:\.[a-z\-]+)?\/\d{7}(?:v\d+)?)\b/gi)) {
+    pushToken(m[1]);
+  }
+
+  const expanded: string[] = [];
+  const seen = new Set<string>();
+  for (const item of candidates) {
+    if (!seen.has(item)) {
+      seen.add(item);
+      expanded.push(item);
+    }
+    const base = stripArxivVersion(item);
+    if (!seen.has(base)) {
+      seen.add(base);
+      expanded.push(base);
+    }
+  }
+  return expanded;
+}
+
+function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
+    .replace(/<math[\s\S]*?<\/math>/gi, " ")
+    .replace(/<\/?(?:p|div|section|article|h\d|li|ul|ol|br|tr|td|th|table|blockquote)[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+type FullTextFetchResult =
+  | {
+      ok: true;
+      sourceUrl: string;
+      sourceTag: "arxiv_html" | "ar5iv_html";
+      plainText: string;
+    }
+  | {
+      ok: false;
+      reason: string;
+    };
+
+async function fetchArxivFullTextByHtmlCandidates(
+  arxivIds: string[],
+  timeoutMs: number,
+): Promise<FullTextFetchResult> {
+  const candidates: Array<{ url: string; tag: "arxiv_html" | "ar5iv_html" }> = [];
+  const seen = new Set<string>();
+  for (const id of arxivIds) {
+    const normalized = normalizeArxivToken(id);
+    if (!normalized) continue;
+    for (const host of ["https://arxiv.org/html", "https://ar5iv.org/html"] as const) {
+      const url = `${host}/${normalized}`;
+      if (seen.has(url)) continue;
+      seen.add(url);
+      candidates.push({ url, tag: host.includes("ar5iv") ? "ar5iv_html" : "arxiv_html" });
+    }
+  }
+
+  const errors: string[] = [];
+  for (const candidate of candidates) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(candidate.url, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "scientify-fulltext-bootstrap/1.0",
+        },
+      });
+      if (!res.ok) {
+        errors.push(`${candidate.tag}:http_${res.status}`);
+        continue;
+      }
+      const rawHtml = await res.text();
+      const plain = htmlToPlainText(rawHtml);
+      if (plain.length < MIN_FULLTEXT_TEXT_CHARS) {
+        errors.push(`${candidate.tag}:content_too_short(${plain.length})`);
+        continue;
+      }
+      return {
+        ok: true,
+        sourceUrl: candidate.url,
+        sourceTag: candidate.tag,
+        plainText: plain,
+      };
+    } catch (error) {
+      errors.push(
+        `${candidate.tag}:${error instanceof Error ? error.name || error.message : "fetch_failed"}`,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return {
+    ok: false,
+    reason: errors.length > 0 ? errors.join(";") : "html_fulltext_unavailable",
+  };
+}
+
+async function backfillStrictCoreFullText(args: {
+  corePapers: KnowledgePaperInput[];
+  maxAttempts: number;
+}): Promise<{
+  corePapers: KnowledgePaperInput[];
+  attempted: number;
+  completed: number;
+  failures: string[];
+}> {
+  const updated: KnowledgePaperInput[] = [];
+  let attempted = 0;
+  let completed = 0;
+  const failures: string[] = [];
+
+  for (const paper of args.corePapers) {
+    if (paper.fullTextRead === true || paper.readStatus === "fulltext") {
+      updated.push(paper);
+      continue;
+    }
+
+    const arxivIds = parseArxivIdCandidatesFromPaper({
+      id: paper.id,
+      url: paper.url,
+      title: paper.title,
+    });
+
+    if (arxivIds.length === 0) {
+      updated.push({
+        ...paper,
+        fullTextRead: false,
+        readStatus: paper.readStatus ?? "metadata",
+        unreadReason:
+          paper.unreadReason ??
+          "Automatic full-text bootstrap currently supports arXiv papers with parseable IDs only.",
+      });
+      continue;
+    }
+
+    if (attempted >= args.maxAttempts) {
+      updated.push({
+        ...paper,
+        fullTextRead: false,
+        readStatus: paper.readStatus ?? "metadata",
+        unreadReason: paper.unreadReason ?? "Full-text bootstrap attempt budget reached in this run.",
+      });
+      continue;
+    }
+
+    attempted += 1;
+    let fetched = await fetchArxivFullTextByHtmlCandidates(arxivIds, DEFAULT_FULLTEXT_FETCH_TIMEOUT_MS);
+    if (!fetched.ok) {
+      fetched = await fetchArxivFullTextByHtmlCandidates(arxivIds, RETRY_FULLTEXT_FETCH_TIMEOUT_MS);
+    }
+    if (!fetched.ok) {
+      failures.push(`${arxivIds[0]}:${fetched.reason}`);
+      updated.push({
+        ...paper,
+        fullTextRead: false,
+        readStatus: paper.readStatus ?? "metadata",
+        unreadReason: paper.unreadReason ?? `Automatic full-text fetch failed: ${fetched.reason}`,
+      });
+      continue;
+    }
+
+    completed += 1;
+    const excerpt = fetched.plainText.slice(0, 360).replace(/\s+/g, " ").trim();
+    updated.push({
+      ...paper,
+      fullTextRead: true,
+      readStatus: "fulltext",
+      fullTextSource: fetched.sourceTag,
+      fullTextRef: fetched.sourceUrl,
+      unreadReason: undefined,
+      ...(paper.keyEvidenceSpans && paper.keyEvidenceSpans.length > 0
+        ? {}
+        : excerpt.length > 0
+          ? { keyEvidenceSpans: [excerpt] }
+          : {}),
+    });
+  }
+
+  return {
+    corePapers: updated,
+    attempted,
+    completed,
+    failures,
+  };
+}
+
 function sanitizeKeyword(raw: string): string | undefined {
   const normalized = normalizeText(raw).toLowerCase();
   if (normalized.length < 2 || normalized.length > 48) return undefined;
@@ -338,6 +580,240 @@ function tokenizeKeywords(raw: string): string[] {
     seen.add(keyword);
   }
   return [...seen];
+}
+
+type ArxivFallbackCandidate = {
+  id: string;
+  title: string;
+  summary?: string;
+  url: string;
+  published?: string;
+};
+
+function decodeXmlEntities(raw: string): string {
+  return raw
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&apos;/g, "'");
+}
+
+function stripXmlTag(raw: string, tag: string): string {
+  const match = raw.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  if (!match?.[1]) return "";
+  return normalizeText(decodeXmlEntities(match[1].replace(/<[^>]+>/g, " ").trim()));
+}
+
+function parseArxivAtomCandidates(xml: string): ArxivFallbackCandidate[] {
+  const entries = xml.match(/<entry>([\s\S]*?)<\/entry>/gi) ?? [];
+  const parsed: ArxivFallbackCandidate[] = [];
+  for (const entryRaw of entries) {
+    const title = stripXmlTag(entryRaw, "title");
+    const summary = stripXmlTag(entryRaw, "summary");
+    const idUrl = stripXmlTag(entryRaw, "id");
+    const published = stripXmlTag(entryRaw, "published");
+    const arxivCandidates = parseArxivIdCandidatesFromPaper({ id: idUrl, url: idUrl, title });
+    const arxivId = arxivCandidates[0];
+    if (!title || !arxivId) continue;
+    parsed.push({
+      id: `arxiv:${stripArxivVersion(arxivId)}`,
+      title,
+      summary,
+      url: `https://arxiv.org/abs/${stripArxivVersion(arxivId)}`,
+      ...(published ? { published } : {}),
+    });
+  }
+  return parsed;
+}
+
+function buildStrictFallbackQueries(topic: string): string[] {
+  const normalizedTopic = normalizeText(topic);
+  const queries: string[] = [normalizedTopic];
+  const tokens = tokenizeKeywords(normalizedTopic).filter((token) => token.length >= 3).slice(0, 8);
+  if (tokens.length >= 2) {
+    queries.push(tokens.join(" "));
+  }
+  if (tokens.length >= 4) {
+    queries.push(tokens.slice(0, 4).join(" "));
+  }
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const query of queries) {
+    const key = normalizeText(query).toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(query);
+  }
+  return deduped.slice(0, STRICT_EMPTY_FALLBACK_MAX_QUERIES);
+}
+
+function countTokenOverlap(tokens: string[], text: string): number {
+  const hay = ` ${normalizeText(text).toLowerCase()} `;
+  let score = 0;
+  for (const token of tokens) {
+    if (token.length < 2) continue;
+    if (hay.includes(` ${token} `)) score += 1;
+  }
+  return score;
+}
+
+function scoreFallbackCandidate(topicTokens: string[], paper: ArxivFallbackCandidate): number {
+  const titleOverlap = countTokenOverlap(topicTokens, paper.title);
+  const abstractOverlap = countTokenOverlap(topicTokens, paper.summary ?? "");
+  const publishedAt = paper.published ? Date.parse(paper.published) : NaN;
+  const recencyBoost = Number.isFinite(publishedAt)
+    ? Math.max(0, Math.min(8, (Date.now() - publishedAt) / (1000 * 60 * 60 * 24 * -180)))
+    : 0;
+  const rawScore = 60 + titleOverlap * 8 + abstractOverlap * 3 + recencyBoost;
+  return Math.max(50, Math.min(99, Math.round(rawScore)));
+}
+
+async function fetchArxivFallbackByQuery(query: string): Promise<ArxivFallbackCandidate[]> {
+  const params = new URLSearchParams({
+    search_query: query,
+    start: "0",
+    max_results: String(STRICT_EMPTY_FALLBACK_MAX_RESULTS),
+    sortBy: "relevance",
+    sortOrder: "descending",
+  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const res = await fetch(`${ARXIV_API_URL}?${params.toString()}`, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "scientify-empty-fallback/1.0",
+      },
+    });
+    if (!res.ok) return [];
+    const xml = await res.text();
+    return parseArxivAtomCandidates(xml);
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function strictCoreFallbackSeed(args: {
+  topic: string;
+  maxPapers: number;
+  knownPaperIds: Set<string>;
+}): Promise<{
+  papers: PaperRecordInput[];
+  corePapers: KnowledgePaperInput[];
+  explorationTrace: ExplorationTraceInput[];
+  notes: string;
+}> {
+  const queries = buildStrictFallbackQueries(args.topic);
+  const byId = new Map<string, ArxivFallbackCandidate>();
+  const traces: ExplorationTraceInput[] = [];
+  for (const query of queries) {
+    const rows = await fetchArxivFallbackByQuery(query);
+    traces.push({
+      query,
+      reason: "strict_core_backfill_seed",
+      source: "arxiv",
+      candidates: rows.length,
+      filteredTo: rows.length,
+      resultCount: rows.length,
+    });
+    for (const row of rows) {
+      if (!byId.has(row.id)) byId.set(row.id, row);
+    }
+  }
+
+  const topicTokens = tokenizeKeywords(args.topic);
+  const ranked = [...byId.values()]
+    .map((row) => ({
+      row,
+      score: scoreFallbackCandidate(topicTokens, row),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  const unseen = ranked.filter((item) => !args.knownPaperIds.has(item.row.id));
+  const effectivePool = unseen.length > 0 ? unseen : ranked;
+  const selected = effectivePool.slice(0, Math.max(1, Math.min(10, args.maxPapers)));
+
+  const papers: PaperRecordInput[] = selected.map(({ row, score }) => ({
+    id: row.id,
+    title: row.title,
+    url: row.url,
+    score,
+    reason: "auto_seeded_fallback_after_sparse_core_strict_run",
+  }));
+
+  const corePapers: KnowledgePaperInput[] = selected.map(({ row, score }) => ({
+    id: row.id,
+    title: row.title,
+    url: row.url,
+    source: "arxiv",
+    ...(row.published ? { publishedAt: row.published } : {}),
+    score,
+    reason: "auto_seeded_fallback_after_sparse_core_strict_run",
+    ...(row.summary ? { summary: row.summary } : {}),
+    fullTextRead: false,
+    readStatus: "metadata",
+    unreadReason: "Auto-seeded fallback candidate; full-text bootstrap pending.",
+  }));
+
+  return {
+    papers,
+    corePapers,
+    explorationTrace: traces,
+    notes: `strict_core_backfill_seed selected=${selected.length} queries=${queries.length}`,
+  };
+}
+
+function dedupePaperRecords(records: PaperRecordInput[]): PaperRecordInput[] {
+  const byId = new Map<string, PaperRecordInput>();
+  for (const record of records) {
+    const id = derivePaperId(record);
+    const existing = byId.get(id);
+    if (!existing) {
+      byId.set(id, { ...record, ...(record.id ? {} : { id }) });
+      continue;
+    }
+    byId.set(id, {
+      id: existing.id ?? record.id ?? id,
+      title: existing.title ?? record.title,
+      url: existing.url ?? record.url,
+      score:
+        typeof existing.score === "number" && Number.isFinite(existing.score)
+          ? typeof record.score === "number" && Number.isFinite(record.score)
+            ? Math.max(existing.score, record.score)
+            : existing.score
+          : record.score,
+      reason: existing.reason ?? record.reason,
+    });
+  }
+  return [...byId.values()];
+}
+
+function dedupeKnowledgePapers(records: KnowledgePaperInput[]): KnowledgePaperInput[] {
+  const byId = new Map<string, KnowledgePaperInput>();
+  for (const record of records) {
+    const id = derivePaperId({ id: record.id, title: record.title, url: record.url });
+    const existing = byId.get(id);
+    if (!existing) {
+      byId.set(id, {
+        ...record,
+        ...(record.id ? {} : { id }),
+      });
+      continue;
+    }
+    byId.set(id, {
+      ...existing,
+      ...record,
+      id: existing.id ?? record.id ?? id,
+      title: existing.title ?? record.title,
+      url: existing.url ?? record.url,
+      summary: existing.summary ?? record.summary,
+      unreadReason: existing.unreadReason ?? record.unreadReason,
+    });
+  }
+  return [...byId.values()];
 }
 
 function normalizeSource(raw?: string): string | undefined {
@@ -690,8 +1166,192 @@ export async function recordIncrementalPush(args: {
   const memory = ensureTopicMemoryState(topicState);
   const now = Date.now();
 
+  const normalizedPapersFromKnowledgeState: PaperRecordInput[] = (args.knowledgeState?.corePapers ?? [])
+    .filter((paper) => paper && typeof paper === "object")
+    .map((paper) => ({
+      ...(paper.id ? { id: paper.id } : {}),
+      ...(paper.title ? { title: paper.title } : {}),
+      ...(paper.url ? { url: paper.url } : {}),
+      ...(typeof paper.score === "number" && Number.isFinite(paper.score) ? { score: paper.score } : {}),
+      ...(paper.reason ? { reason: paper.reason } : {}),
+    }));
+  let effectivePapers =
+    args.papers.length > 0
+      ? args.papers
+      : normalizedPapersFromKnowledgeState.length > 0
+        ? normalizedPapersFromKnowledgeState
+        : [];
+
+  const incomingRunLog = args.knowledgeState?.runLog
+    ? { ...args.knowledgeState.runLog }
+    : undefined;
+  const incomingRunProfile =
+    incomingRunLog?.runProfile === "fast" || incomingRunLog?.runProfile === "strict"
+      ? incomingRunLog.runProfile
+      : undefined;
+  let effectiveRunLog = incomingRunLog ? { ...incomingRunLog } : undefined;
+  if (incomingRunProfile === "strict" && effectiveRunLog) {
+    const requiredCoreRaw =
+      typeof effectiveRunLog.requiredCorePapers === "number" && Number.isFinite(effectiveRunLog.requiredCorePapers)
+        ? Math.floor(effectiveRunLog.requiredCorePapers)
+        : 0;
+    if (requiredCoreRaw > 0) {
+      effectiveRunLog.requiredCorePapers = Math.max(1, requiredCoreRaw);
+    } else {
+      delete effectiveRunLog.requiredCorePapers;
+    }
+
+    if (
+      typeof effectiveRunLog.requiredFullTextCoveragePct !== "number" ||
+      !Number.isFinite(effectiveRunLog.requiredFullTextCoveragePct) ||
+      effectiveRunLog.requiredFullTextCoveragePct < 80
+    ) {
+      effectiveRunLog.requiredFullTextCoveragePct = 80;
+    }
+  }
+  let effectiveKnowledgeState =
+    args.knowledgeState || effectiveRunLog
+      ? {
+          ...(args.knowledgeState ?? {}),
+          ...(effectiveRunLog ? { runLog: effectiveRunLog } : {}),
+        }
+      : undefined;
+
+  if (incomingRunProfile === "strict") {
+    const requiredCoreFloor = Math.max(
+      1,
+      Math.min(topicState.preferences.maxPapers, effectiveRunLog?.requiredCorePapers ?? Math.min(3, topicState.preferences.maxPapers)),
+    );
+    const existingCorePapers = effectiveKnowledgeState?.corePapers ?? [];
+    const strictSignalCount = Math.max(existingCorePapers.length, effectivePapers.length);
+    if (strictSignalCount < requiredCoreFloor) {
+      const knownIds = new Set<string>(Object.keys(topicState.pushedPapers));
+      for (const paper of effectivePapers) knownIds.add(derivePaperId(paper));
+      for (const paper of existingCorePapers) {
+        knownIds.add(derivePaperId({ id: paper.id, title: paper.title, url: paper.url }));
+      }
+      const fallback = await strictCoreFallbackSeed({
+        topic: topicState.topic,
+        maxPapers: requiredCoreFloor,
+        knownPaperIds: knownIds,
+      });
+
+      if (fallback.papers.length > 0) {
+        const existingIds = new Set<string>(effectivePapers.map((paper) => derivePaperId(paper)));
+        let fallbackPapers = fallback.papers.filter((paper) => !existingIds.has(derivePaperId(paper)));
+        const needed = Math.max(0, requiredCoreFloor - strictSignalCount);
+        if (needed > 0) {
+          if (fallbackPapers.length === 0) fallbackPapers = fallback.papers;
+          fallbackPapers = fallbackPapers.slice(0, needed);
+        }
+
+        const fallbackIds = new Set<string>(fallbackPapers.map((paper) => derivePaperId(paper)));
+        const fallbackCore = fallback.corePapers.filter((paper) =>
+          fallbackIds.has(derivePaperId({ id: paper.id, title: paper.title, url: paper.url })),
+        );
+
+        effectivePapers = dedupePaperRecords([...effectivePapers, ...fallbackPapers]);
+        const mergedRunLog = {
+          ...(effectiveRunLog ?? { runProfile: "strict" as const }),
+          notes: [
+            effectiveRunLog?.notes,
+            fallback.notes,
+            `strict_core_topup required=${requiredCoreFloor} before=${strictSignalCount} added=${fallbackPapers.length}`,
+          ]
+            .filter((item): item is string => Boolean(item && item.trim().length > 0))
+            .join(" || "),
+        };
+        effectiveRunLog = mergedRunLog;
+        effectiveKnowledgeState = {
+          ...(effectiveKnowledgeState ?? {}),
+          corePapers: dedupeKnowledgePapers([...(effectiveKnowledgeState?.corePapers ?? []), ...fallbackCore]),
+          explorationTrace: [
+            ...(effectiveKnowledgeState?.explorationTrace ?? []),
+            ...fallback.explorationTrace,
+          ],
+          runLog: mergedRunLog,
+        };
+      }
+    }
+  }
+
+  if (incomingRunProfile === "strict") {
+    const strictCoreFromState = effectiveKnowledgeState?.corePapers ?? [];
+    const strictCoreSeed: KnowledgePaperInput[] =
+      strictCoreFromState.length > 0
+        ? strictCoreFromState
+        : effectivePapers.map((paper) => ({
+            ...(paper.id ? { id: paper.id } : {}),
+            ...(paper.title ? { title: paper.title } : {}),
+            ...(paper.url ? { url: paper.url } : {}),
+            ...(typeof paper.score === "number" && Number.isFinite(paper.score) ? { score: paper.score } : {}),
+            ...(paper.reason ? { reason: paper.reason } : {}),
+            fullTextRead: false,
+            readStatus: "metadata",
+            unreadReason: "Full text not fetched yet; pending strict full-text bootstrap.",
+          }));
+
+    if (strictCoreSeed.length > 0) {
+      const strictAttemptLimit = Math.max(
+        1,
+        Math.min(
+          MAX_STRICT_FULLTEXT_ATTEMPTS,
+          effectiveRunLog?.requiredCorePapers ?? strictCoreSeed.length,
+        ),
+      );
+      const backfilled = await backfillStrictCoreFullText({
+        corePapers: strictCoreSeed,
+        maxAttempts: strictAttemptLimit,
+      });
+      const strictRunLog = {
+        ...(effectiveRunLog ?? { runProfile: "strict" as const }),
+        fullTextAttempted: backfilled.attempted,
+        fullTextCompleted: backfilled.completed,
+        notes: [
+          effectiveRunLog?.notes,
+          `strict_fulltext_bootstrap attempted=${backfilled.attempted} completed=${backfilled.completed}`,
+          ...(backfilled.failures.length > 0
+            ? [`strict_fulltext_failures=${backfilled.failures.slice(0, 8).join(" | ")}`]
+            : []),
+        ]
+          .filter((item): item is string => Boolean(item && item.trim().length > 0))
+          .join(" || "),
+      };
+      effectiveRunLog = strictRunLog;
+      effectiveKnowledgeState = {
+        ...(effectiveKnowledgeState ?? {}),
+        corePapers: backfilled.corePapers,
+        runLog: strictRunLog,
+      };
+    }
+  }
+
+  const statusRaw = normalizeText(args.status ?? "").toLowerCase();
+  const researchArtifactsCount =
+    effectivePapers.length +
+    (effectiveKnowledgeState?.explorationPapers?.length ?? 0) +
+    (effectiveKnowledgeState?.knowledgeChanges?.length ?? 0) +
+    (effectiveKnowledgeState?.knowledgeUpdates?.length ?? 0) +
+    (effectiveKnowledgeState?.hypotheses?.length ?? 0) +
+    (effectiveKnowledgeState?.explorationTrace?.length ?? 0);
+  let normalizedStatus = statusRaw.length > 0 ? statusRaw : undefined;
+  const coercedFromEmptyWithArtifacts = normalizedStatus === "empty" && researchArtifactsCount > 0;
+  if (coercedFromEmptyWithArtifacts) {
+    normalizedStatus = "degraded_quality";
+  }
+  const hasRunError = Boolean(
+    effectiveKnowledgeState?.runLog?.error && normalizeText(effectiveKnowledgeState.runLog.error).length > 0,
+  );
+  const requiresArtifacts =
+    normalizedStatus === "ok" || normalizedStatus === "fallback_representative" || normalizedStatus === "degraded_quality";
+  if (requiresArtifacts && researchArtifactsCount === 0 && !hasRunError) {
+    throw new Error(
+      "record payload has no research artifacts. Use status=empty for no-result runs, or include run_log.error for failed runs.",
+    );
+  }
+
   let recordedPapers = 0;
-  for (const rawPaper of args.papers) {
+  for (const rawPaper of effectivePapers) {
     const id = derivePaperId(rawPaper);
     const existing = topicState.pushedPapers[id];
     if (existing) {
@@ -724,7 +1384,12 @@ export async function recordIncrementalPush(args: {
 
   topicState.totalRuns += 1;
   topicState.lastRunAtMs = now;
-  topicState.lastStatus = args.status?.trim() || (recordedPapers > 0 ? "ok" : "empty");
+  topicState.lastStatus = normalizedStatus ?? (recordedPapers > 0 ? "ok" : "empty");
+  const effectiveNote = coercedFromEmptyWithArtifacts
+    ? [args.note?.trim(), "status coerced: empty -> degraded_quality because research artifacts were present"]
+        .filter((item): item is string => Boolean(item && item.length > 0))
+        .join(" | ")
+    : args.note;
   const knowledgeCommitted = await commitKnowledgeRun({
     projectId: args.projectId ?? topicState.lastProjectId,
     scope: topicState.scope,
@@ -732,9 +1397,9 @@ export async function recordIncrementalPush(args: {
     topicKey: topicState.topicKey,
     status: topicState.lastStatus,
     runId: args.runId,
-    note: args.note,
-    papers: args.papers,
-    knowledgeState: args.knowledgeState,
+    note: effectiveNote,
+    papers: effectivePapers,
+    knowledgeState: effectiveKnowledgeState,
   });
   topicState.lastStatus = knowledgeCommitted.summary.lastStatus ?? topicState.lastStatus;
   topicState.lastProjectId = knowledgeCommitted.projectId;
@@ -748,18 +1413,20 @@ export async function recordIncrementalPush(args: {
     topicKey: topicState.topicKey,
     status: topicState.lastStatus,
     runId: knowledgeCommitted.runId,
+    run_id: knowledgeCommitted.runId,
+    run_profile: effectiveKnowledgeState?.runLog?.runProfile ?? null,
     projectId: knowledgeCommitted.projectId,
     streamKey: knowledgeCommitted.streamKey,
     preferences: topicState.preferences,
     recordedPapers,
-    papers: args.papers.map((paper) => ({
+    papers: effectivePapers.map((paper) => ({
       id: derivePaperId(paper),
       title: paper.title?.trim(),
       url: paper.url?.trim(),
       ...(typeof paper.score === "number" && Number.isFinite(paper.score) ? { score: paper.score } : {}),
       ...(paper.reason ? { reason: paper.reason.trim() } : {}),
     })),
-    note: args.note,
+    note: effectiveNote,
     knowledgeStateSummary: knowledgeCommitted.summary,
   });
 

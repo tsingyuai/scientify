@@ -8,20 +8,31 @@ import type {
   ReflectionTaskInput,
 } from "./types.js";
 
+const PLACEHOLDER_TEXT_RE =
+  /^(?:n\/a|na|none|not provided|not available|unknown|tbd|todo|null|nil|未提供|暂无|未知|无)$/iu;
+
 function normalizeText(raw: string): string {
   return raw.trim().replace(/\s+/g, " ");
 }
 
+function cleanText(raw?: string): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const normalized = normalizeText(raw);
+  if (!normalized) return undefined;
+  if (PLACEHOLDER_TEXT_RE.test(normalized)) return undefined;
+  return normalized;
+}
+
 function toCsv(values?: string[]): string | undefined {
   if (!Array.isArray(values) || values.length === 0) return undefined;
-  const cleaned = values.map((item) => item.trim()).filter((item) => item.length > 0);
+  const cleaned = values.map((item) => cleanText(item)).filter((item): item is string => Boolean(item));
   return cleaned.length > 0 ? cleaned.join(", ") : undefined;
 }
 
 function renderStringArray(lines: string[], label: string, values?: string[]): void {
   if (!Array.isArray(values) || values.length === 0) return;
   for (const [idx, value] of values.entries()) {
-    const trimmed = value.trim();
+    const trimmed = cleanText(value);
     if (!trimmed) continue;
     lines.push(`   - ${label}_${idx + 1}: ${trimmed}`);
   }
@@ -122,59 +133,104 @@ export function renderPaperNoteRunMarkdown(args: {
   paper: KnowledgePaperInput;
 }): string {
   const paper = args.paper;
+  const profileFieldChecks: Array<{ label: string; filled: boolean }> = [
+    { label: "domain", filled: Boolean(cleanText(paper.domain)) },
+    { label: "subdomains", filled: Boolean(toCsv(paper.subdomains)) },
+    { label: "cross_domain_links", filled: Boolean(toCsv(paper.crossDomainLinks)) },
+    { label: "research_goal", filled: Boolean(cleanText(paper.researchGoal)) },
+    { label: "approach", filled: Boolean(cleanText(paper.approach)) },
+    { label: "methodology_design", filled: Boolean(cleanText(paper.methodologyDesign)) },
+    { label: "key_contributions", filled: Boolean(paper.keyContributions && paper.keyContributions.length > 0) },
+    { label: "practical_insights", filled: Boolean(paper.practicalInsights && paper.practicalInsights.length > 0) },
+    {
+      label: "must_understand_points",
+      filled: Boolean(paper.mustUnderstandPoints && paper.mustUnderstandPoints.length > 0),
+    },
+    { label: "limitations", filled: Boolean(paper.limitations && paper.limitations.length > 0) },
+    { label: "evidence_anchors", filled: Boolean(paper.evidenceAnchors && paper.evidenceAnchors.length > 0) },
+  ];
+  const profileFilledCount = profileFieldChecks.filter((item) => item.filled).length;
+  const profileMissingFields = profileFieldChecks.filter((item) => !item.filled).map((item) => item.label);
+
   const lines = [
     `## Run ${args.runId}`,
     `- Time: ${args.now}`,
     `- Role in run: ${args.role}`,
-    `- Read status: ${paper.readStatus ?? (paper.fullTextRead ? "fulltext" : "metadata")}`,
+    `- Read status: ${cleanText(paper.readStatus) ?? (paper.fullTextRead ? "fulltext" : "metadata")}`,
     `- Full-text read: ${paper.fullTextRead === true ? "true" : "false"}`,
+    `- Profile coverage: ${profileFilledCount}/${profileFieldChecks.length}`,
   ];
-  if (paper.fullTextSource?.trim()) lines.push(`- Full-text source: ${paper.fullTextSource.trim()}`);
-  if (paper.fullTextRef?.trim()) lines.push(`- Full-text ref: ${paper.fullTextRef.trim()}`);
-  if (paper.unreadReason?.trim()) lines.push(`- Unread reason: ${paper.unreadReason.trim()}`);
+  if (profileMissingFields.length > 0) lines.push(`- Missing fields: ${profileMissingFields.join(", ")}`);
+  if (cleanText(paper.fullTextSource)) lines.push(`- Full-text source: ${cleanText(paper.fullTextSource)}`);
+  if (cleanText(paper.fullTextRef)) lines.push(`- Full-text ref: ${cleanText(paper.fullTextRef)}`);
+  if (cleanText(paper.unreadReason)) lines.push(`- Unread reason: ${cleanText(paper.unreadReason)}`);
   lines.push("");
 
   lines.push("### Research Positioning");
-  lines.push(`- Domain: ${paper.domain?.trim() || "N/A"}`);
-  lines.push(`- Subdomains: ${toCsv(paper.subdomains) ?? "N/A"}`);
-  lines.push(`- Cross-domain links: ${toCsv(paper.crossDomainLinks) ?? "N/A"}`);
+  const domain = cleanText(paper.domain);
+  const subdomains = toCsv(paper.subdomains);
+  const crossDomainLinks = toCsv(paper.crossDomainLinks);
+  if (domain) lines.push(`- Domain: ${domain}`);
+  if (subdomains) lines.push(`- Subdomains: ${subdomains}`);
+  if (crossDomainLinks) lines.push(`- Cross-domain links: ${crossDomainLinks}`);
+  if (!domain && !subdomains && !crossDomainLinks) {
+    lines.push("- Pending enrichment: taxonomy fields were not extracted in this run.");
+  }
   lines.push("");
 
   lines.push("### Study Focus");
-  lines.push(`- Research goal: ${paper.researchGoal?.trim() || "N/A"}`);
-  lines.push(`- Approach: ${paper.approach?.trim() || "N/A"}`);
-  lines.push(`- Methodology design: ${paper.methodologyDesign?.trim() || "N/A"}`);
+  const researchGoal = cleanText(paper.researchGoal);
+  const approach = cleanText(paper.approach);
+  const methodologyDesign = cleanText(paper.methodologyDesign);
+  if (researchGoal) lines.push(`- Research goal: ${researchGoal}`);
+  if (approach) lines.push(`- Approach: ${approach}`);
+  if (methodologyDesign) lines.push(`- Methodology design: ${methodologyDesign}`);
+  if (!researchGoal && !approach && !methodologyDesign) {
+    lines.push("- Pending enrichment: study-focus fields were not extracted in this run.");
+  }
   lines.push("");
 
   lines.push("### Contributions");
-  if (paper.keyContributions && paper.keyContributions.length > 0) {
-    lines.push(...paper.keyContributions.map((item, idx) => `${idx + 1}. ${item}`));
+  const keyContributions = (paper.keyContributions ?? [])
+    .map((item) => cleanText(item))
+    .filter((item): item is string => Boolean(item));
+  if (keyContributions.length > 0) {
+    lines.push(...keyContributions.map((item, idx) => `${idx + 1}. ${item}`));
   } else {
-    lines.push("1. (not provided)");
+    lines.push("- Pending enrichment: no concrete contribution extracted yet.");
   }
   lines.push("");
 
   lines.push("### Practical Insights");
-  if (paper.practicalInsights && paper.practicalInsights.length > 0) {
-    lines.push(...paper.practicalInsights.map((item, idx) => `${idx + 1}. ${item}`));
+  const practicalInsights = (paper.practicalInsights ?? [])
+    .map((item) => cleanText(item))
+    .filter((item): item is string => Boolean(item));
+  if (practicalInsights.length > 0) {
+    lines.push(...practicalInsights.map((item, idx) => `${idx + 1}. ${item}`));
   } else {
-    lines.push("1. (not provided)");
+    lines.push("- Pending enrichment: no practical insight extracted yet.");
   }
   lines.push("");
 
   lines.push("### Must Understand");
-  if (paper.mustUnderstandPoints && paper.mustUnderstandPoints.length > 0) {
-    lines.push(...paper.mustUnderstandPoints.map((item, idx) => `${idx + 1}. ${item}`));
+  const mustUnderstandPoints = (paper.mustUnderstandPoints ?? [])
+    .map((item) => cleanText(item))
+    .filter((item): item is string => Boolean(item));
+  if (mustUnderstandPoints.length > 0) {
+    lines.push(...mustUnderstandPoints.map((item, idx) => `${idx + 1}. ${item}`));
   } else {
-    lines.push("1. (not provided)");
+    lines.push("- Pending enrichment: key concepts to master were not extracted yet.");
   }
   lines.push("");
 
   lines.push("### Limitations");
-  if (paper.limitations && paper.limitations.length > 0) {
-    lines.push(...paper.limitations.map((item, idx) => `${idx + 1}. ${item}`));
+  const limitations = (paper.limitations ?? [])
+    .map((item) => cleanText(item))
+    .filter((item): item is string => Boolean(item));
+  if (limitations.length > 0) {
+    lines.push(...limitations.map((item, idx) => `${idx + 1}. ${item}`));
   } else {
-    lines.push("1. (not provided)");
+    lines.push("- Pending enrichment: limitation analysis not extracted yet.");
   }
   lines.push("");
 
@@ -187,7 +243,11 @@ export function renderPaperNoteRunMarkdown(args: {
   } else if (paper.keyEvidenceSpans && paper.keyEvidenceSpans.length > 0) {
     lines.push(...paper.keyEvidenceSpans.map((item, idx) => `${idx + 1}. ${item}`));
   } else {
-    lines.push("1. (not provided)");
+    if (paper.fullTextRead === true || paper.readStatus === "fulltext") {
+      lines.push("- Pending enrichment: add section + locator + quote evidence anchors.");
+    } else {
+      lines.push("- Metadata-only read in this run; evidence anchors require full-text reading.");
+    }
   }
   lines.push("");
 
@@ -350,9 +410,9 @@ export function renderHypothesisMarkdown(args: {
   runId: string;
   hypothesis: KnowledgeHypothesisInput;
 }): string {
-  const novelty = typeof args.hypothesis.novelty === "number" ? args.hypothesis.novelty : "N/A";
-  const feasibility = typeof args.hypothesis.feasibility === "number" ? args.hypothesis.feasibility : "N/A";
-  const impact = typeof args.hypothesis.impact === "number" ? args.hypothesis.impact : "N/A";
+  const novelty = typeof args.hypothesis.novelty === "number" ? args.hypothesis.novelty : "pending";
+  const feasibility = typeof args.hypothesis.feasibility === "number" ? args.hypothesis.feasibility : "pending";
+  const impact = typeof args.hypothesis.impact === "number" ? args.hypothesis.impact : "pending";
 
   const lines = [
     `# ${args.hypothesisId}`,
@@ -367,7 +427,7 @@ export function renderHypothesisMarkdown(args: {
     "## Dependency Path",
     ...(args.hypothesis.dependencyPath && args.hypothesis.dependencyPath.length > 0
       ? args.hypothesis.dependencyPath.map((step, idx) => `${idx + 1}. ${step}`)
-      : ["1. (not provided)"]),
+      : ["- Pending enrichment: dependency path not extracted in this run."]),
     "",
     "## Evidence IDs",
     ...(args.hypothesis.evidenceIds && args.hypothesis.evidenceIds.length > 0
@@ -376,7 +436,7 @@ export function renderHypothesisMarkdown(args: {
     "",
     "## Validation",
     `- Status: ${args.hypothesis.validationStatus ?? "unchecked"}`,
-    `- Notes: ${args.hypothesis.validationNotes ?? "N/A"}`,
+    `- Notes: ${args.hypothesis.validationNotes ?? "pending"}`,
     ...(args.hypothesis.validationEvidence && args.hypothesis.validationEvidence.length > 0
       ? [
           "- Evidence:",
@@ -397,6 +457,7 @@ export function renderHypothesisMarkdown(args: {
 export function renderKnowledgeIndexMarkdown(args: {
   now: string;
   topic: string;
+  runProfile: "fast" | "strict";
   topicFiles: string[];
   paperNotesCount: number;
   totalHypotheses: number;
@@ -420,6 +481,7 @@ export function renderKnowledgeIndexMarkdown(args: {
     "",
     `- Updated: ${args.now}`,
     `- Topic: ${args.topic}`,
+    `- Run profile: ${args.runProfile}`,
     `- Topic files: ${args.topicFiles.length}`,
     `- Paper notes: ${args.paperNotesCount}`,
     `- Total hypotheses: ${args.totalHypotheses}`,

@@ -31,18 +31,21 @@ const SCIENTIFY_TOOLS = new Set([
 const SCIENTIFY_SKILLS = new Set([
   "idea-generation",
   "research-pipeline",
+  "research-collect",
   "research-survey",
   "research-plan",
   "research-implement",
   "research-review",
   "research-experiment",
-  "literature-survey",
   "write-review-paper",
   "research-subscription",
+  // Compatibility skills kept for migration windows.
+  "metabolism",
+  "metabolism-init",
 ]);
 
 const SCIENTIFY_SKILL_COMMAND_RE =
-  /(?:^|\s)\/(idea-generation|research-pipeline|research-survey|research-plan|research-implement|research-review|research-experiment|literature-survey|write-review-paper|research-subscription)(?:\s|$)/i;
+  /(?:^|\s)\/(idea-generation|research-pipeline|research-collect|research-survey|research-plan|research-implement|research-review|research-experiment|write-review-paper|research-subscription|research-subscribe|research-subscriptions|research-unsubscribe|metabolism|metabolism-init|metabolism-status)(?:\s|$)/i;
 
 const SIGNATURE_PROMPT = `[Scientify Signature]
 If this response is based on Scientify workflow execution (Scientify skills/tools), append this exact footer at the end of your reply:

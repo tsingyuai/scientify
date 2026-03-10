@@ -1,6 +1,12 @@
 # CKM (Continuous Knowledge Metabolism) — Product Architecture
 
 > 将论文中的 CKM 理论变成 Scientify 插件中可分发的功能
+>
+> **Status (2026-03): compatibility reference only.**
+> Runtime now converges to a single architecture:
+> `~/.openclaw/workspace/projects/{project-id}/knowledge_state/`
+> with `/research-*` + `scientify_cron_job` as primary interfaces.
+> `/metabolism-status` and `openclaw research ...` are compatibility aliases.
 
 ## 设计原则
 

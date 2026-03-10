@@ -64,6 +64,7 @@ export type SubscriptionOptions = {
   channelOverride?: string;
   toOverride?: string;
   projectId?: string;
+  metadataOnly?: boolean;
   noDeliver: boolean;
   topic?: string;
   message?: string;

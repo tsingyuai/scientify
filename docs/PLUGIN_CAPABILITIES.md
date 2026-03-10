@@ -223,17 +223,18 @@ api.registerCli(
 - Type signature: `registerCli: (registrar: (ctx: { program: Command }) => void, opts?: { commands?: string[] }) => void`
 
 ### Use Cases
-- `openclaw research init <id>` — Create agent + workspace + cron job for a research project
-- `openclaw research list` — List all research projects
-- `openclaw research delete <id>` — Clean up project agent and workspace
+- `openclaw research init <id>` — Create a project scaffold in unified workspace (`~/.openclaw/workspace/projects/<id>`)
+- `openclaw research list` — List unified workspace projects
+- `openclaw research status <id>` — Inspect project-level `knowledge_state` and related cron jobs
+- `openclaw research delete <id>` — Remove project files (cron jobs are managed separately)
 
 ### Capabilities Within CLI Handler
 | Operation | How |
 |---|---|
-| Create agent | Shell out to `openclaw agents add <id> --workspace <path>` or write config directly |
-| Write workspace files | `fs.writeFileSync()` — SOUL.md, AGENTS.md, skill files |
-| Modify central config | Read/write `~/.openclaw/openclaw.json` — add to `agents.list`, create bindings, register cron jobs |
-| Create directories | `fs.mkdirSync()` — workspace, metabolism/, skills/ |
+| Write project files | `fs.writeFileSync()` — `project.json`, `task.json` |
+| Read run status | Read `knowledge_state/state.json` + cron JSON |
+| Create directories | `fs.mkdirSync()` — `workspace/projects/<id>/...` |
+| Remove project | `fs.rmSync()` on project directory only |
 
 ---
 

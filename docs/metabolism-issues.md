@@ -1,6 +1,10 @@
 # Metabolism SKILL.md — 问题清单
 
 > 基于 SKILL.md 和 metabolism-architecture.md 的审阅，按严重性排序。
+>
+> **Status (2026-03): historical review notes.**
+> Current implementation has converged to unified `knowledge_state` under
+> `~/.openclaw/workspace/projects/{project-id}/knowledge_state/`.
 
 ## P0: 系统无法正常运行
 

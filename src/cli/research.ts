@@ -1,353 +1,222 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { renderBootstrapMd, renderSoulMd, renderAgentsMd } from "../templates/bootstrap.js";
 
 const OPENCLAW_HOME = path.join(os.homedir(), ".openclaw");
-const OPENCLAW_CONFIG = path.join(OPENCLAW_HOME, "openclaw.json");
+const PROJECTS_ROOT = path.join(OPENCLAW_HOME, "workspace", "projects");
+const ACTIVE_FILE = path.join(PROJECTS_ROOT, ".active");
 const CRON_JOBS_PATH = path.join(OPENCLAW_HOME, "cron", "jobs.json");
 
-interface ResearchProject {
-  id: string;
-  agentId: string;
-  workspace: string;
-  currentDay: number;
-  createdAt: string;
+type CronJob = {
+  id?: string;
+  jobId?: string;
+  name?: string;
+  payload?: { message?: string };
+};
+
+function ensureProjectsRoot(): void {
+  fs.mkdirSync(PROJECTS_ROOT, { recursive: true });
 }
 
-interface CronJob {
-  name: string;
-  jobId: string;
-  schedule: { kind: "cron"; expr: string; tz: string };
-  sessionTarget: "isolated";
-  payload: { kind: "agentTurn"; agentId: string; message: string };
-  delivery: { mode: "announce" };
-  enabled: boolean;
-}
-
-interface CronJobsFile {
-  version: number;
-  jobs: CronJob[];
-}
-
-function readOpenClawConfig(): Record<string, unknown> {
+function readCronJobs(): CronJob[] {
   try {
-    return JSON.parse(fs.readFileSync(OPENCLAW_CONFIG, "utf-8"));
+    const raw = fs.readFileSync(CRON_JOBS_PATH, "utf-8");
+    const parsed = JSON.parse(raw) as { jobs?: CronJob[] };
+    return Array.isArray(parsed.jobs) ? parsed.jobs : [];
   } catch {
-    return {};
+    return [];
   }
 }
 
-function writeOpenClawConfig(config: Record<string, unknown>): void {
-  fs.writeFileSync(OPENCLAW_CONFIG, JSON.stringify(config, null, 2) + "\n");
+function normalizeProjectId(raw: string): string {
+  const v = raw.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  if (!v) throw new Error("project id is empty after normalization");
+  return v;
 }
 
-function readCronJobs(): CronJobsFile {
+function listProjects(): string[] {
+  ensureProjectsRoot();
+  return fs
+    .readdirSync(PROJECTS_ROOT, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !d.name.startsWith("."))
+    .map((d) => d.name)
+    .sort();
+}
+
+function getActiveProject(): string | undefined {
   try {
-    return JSON.parse(fs.readFileSync(CRON_JOBS_PATH, "utf-8"));
+    const raw = fs.readFileSync(ACTIVE_FILE, "utf-8").trim();
+    return raw || undefined;
   } catch {
-    return { version: 1, jobs: [] };
+    return undefined;
   }
 }
 
-function writeCronJobs(data: CronJobsFile): void {
-  const dir = path.dirname(CRON_JOBS_PATH);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(CRON_JOBS_PATH, JSON.stringify(data, null, 2) + "\n");
+function setActiveProject(projectId: string): void {
+  ensureProjectsRoot();
+  fs.writeFileSync(ACTIVE_FILE, `${projectId}\n`, "utf-8");
 }
 
-function addCronJob(agentId: string): void {
-  const data = readCronJobs();
-  const jobId = `${agentId}-metabolism`;
-
-  // Avoid duplicates
-  if (data.jobs.some((j) => j.jobId === jobId)) return;
-
-  data.jobs.push({
-    name: `${agentId} daily metabolism`,
-    jobId,
-    schedule: { kind: "cron", expr: "0 6 * * *", tz: "Asia/Shanghai" },
-    sessionTarget: "isolated",
-    payload: {
-      kind: "agentTurn",
-      agentId,
-      message: "执行每日知识新陈代谢。阅读 AGENTS.md 了解工作流，然后使用 /metabolism 技能完成今日代谢。",
-    },
-    delivery: { mode: "announce" },
-    enabled: true,
-  });
-
-  writeCronJobs(data);
-}
-
-function removeCronJob(agentId: string): void {
-  const data = readCronJobs();
-  const jobId = `${agentId}-metabolism`;
-  const before = data.jobs.length;
-  data.jobs = data.jobs.filter((j) => j.jobId !== jobId);
-  if (data.jobs.length < before) {
-    writeCronJobs(data);
-  }
-}
-
-function findPluginSkillsDir(entryDir: string): string {
-  // Walk up to find openclaw.plugin.json
-  let dir = entryDir;
-  for (;;) {
-    if (fs.existsSync(path.join(dir, "openclaw.plugin.json"))) {
-      return path.join(dir, "skills");
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return path.join(entryDir, "skills");
-}
-
-function listResearchProjects(): ResearchProject[] {
-  const config = readOpenClawConfig();
-  const agents = (config.agents as { list?: Array<{ id: string; workspace?: string }> })?.list ?? [];
-  const projects: ResearchProject[] = [];
-
-  for (const agent of agents) {
-    if (!agent.id.startsWith("research-")) continue;
-
-    const projectId = agent.id.replace("research-", "");
-    const workspace = agent.workspace
-      ? agent.workspace.replace("~", os.homedir())
-      : path.join(OPENCLAW_HOME, `workspace-${agent.id}`);
-
-    let currentDay = 0;
-    let createdAt = "";
-    const configPath = path.join(workspace, "metabolism", "config.json");
-    try {
-      const mc = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-      currentDay = mc.currentDay ?? 0;
-      createdAt = mc.createdAt ?? "";
-    } catch {
-      // config not yet created (pre-bootstrap)
-    }
-
-    projects.push({
-      id: projectId,
-      agentId: agent.id,
-      workspace,
-      currentDay,
-      createdAt,
-    });
-  }
-
-  return projects;
-}
-
-function initProject(id: string, pluginSkillsDir: string): void {
-  const agentId = `research-${id}`;
-  const workspace = path.join(OPENCLAW_HOME, `workspace-${agentId}`);
-
-  // Check if workspace already exists
-  if (fs.existsSync(workspace)) {
-    console.error(`Error: workspace already exists at ${workspace}`);
+function initProject(rawId: string): void {
+  const id = normalizeProjectId(rawId);
+  ensureProjectsRoot();
+  const projectDir = path.join(PROJECTS_ROOT, id);
+  if (fs.existsSync(projectDir)) {
+    console.error(`Error: project already exists at ${projectDir}`);
     process.exit(1);
   }
 
-  // 1. Create workspace directory structure
   const dirs = [
-    workspace,
-    path.join(workspace, "metabolism"),
-    path.join(workspace, "metabolism", "knowledge"),
-    path.join(workspace, "metabolism", "diffs"),
-    path.join(workspace, "metabolism", "hypotheses"),
-    path.join(workspace, "metabolism", "log"),
-    path.join(workspace, "skills", "metabolism"),
-    path.join(workspace, "survey"),
-    path.join(workspace, "papers"),
-    path.join(workspace, "ideas"),
-    path.join(workspace, "experiments"),
+    projectDir,
+    path.join(projectDir, "papers"),
+    path.join(projectDir, "survey"),
+    path.join(projectDir, "ideas"),
+    path.join(projectDir, "knowledge_state"),
   ];
-  for (const dir of dirs) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  for (const dir of dirs) fs.mkdirSync(dir, { recursive: true });
 
-  // 2. Write bootstrap files
-  fs.writeFileSync(path.join(workspace, "BOOTSTRAP.md"), renderBootstrapMd(id));
-  fs.writeFileSync(path.join(workspace, "SOUL.md"), renderSoulMd(id));
-  fs.writeFileSync(path.join(workspace, "AGENTS.md"), renderAgentsMd());
+  const now = new Date().toISOString();
+  fs.writeFileSync(
+    path.join(projectDir, "project.json"),
+    JSON.stringify({ id, name: id, created: now, topics: [] }, null, 2) + "\n",
+    "utf-8",
+  );
+  fs.writeFileSync(
+    path.join(projectDir, "task.json"),
+    JSON.stringify({ topic: id, created: now, mode: "continuous-research-engine" }, null, 2) + "\n",
+    "utf-8",
+  );
 
-  // 3. Copy metabolism SKILL.md from plugin bundled skills
-  const srcSkill = path.join(pluginSkillsDir, "metabolism", "SKILL.md");
-  const dstSkill = path.join(workspace, "skills", "metabolism", "SKILL.md");
-  if (fs.existsSync(srcSkill)) {
-    fs.copyFileSync(srcSkill, dstSkill);
-  } else {
-    console.warn(`Warning: metabolism SKILL.md not found at ${srcSkill}`);
-  }
+  if (!getActiveProject()) setActiveProject(id);
 
-  // 4. Modify openclaw.json
-  const config = readOpenClawConfig();
-
-  // Add agent to agents.list
-  if (!config.agents) config.agents = {};
-  const agents = config.agents as { list?: Array<{ id: string; workspace: string }> };
-  if (!agents.list) agents.list = [];
-
-  // Check for duplicate
-  if (agents.list.some((a) => a.id === agentId)) {
-    console.error(`Error: agent '${agentId}' already exists in openclaw.json`);
-    process.exit(1);
-  }
-
-  agents.list.push({
-    id: agentId,
-    workspace: `~/.openclaw/workspace-${agentId}`,
-  });
-
-  writeOpenClawConfig(config);
-
-  // 5. Register daily metabolism cron job
-  addCronJob(agentId);
-
-  console.log(`\nResearch project '${id}' created successfully.\n`);
-  console.log(`  Agent ID:  ${agentId}`);
-  console.log(`  Workspace: ${workspace}`);
-  console.log(`  Cron:      daily metabolism at 06:00 (Asia/Shanghai)\n`);
-  console.log("Next steps:");
-  console.log("  1. Restart Gateway to load the new agent");
-  console.log("  2. In Gateway web UI, create a Feishu group binding for this agent");
-  console.log("  3. Send a message in the Feishu group to start the BOOTSTRAP configuration");
+  console.log(`\nResearch project '${id}' initialized under unified workspace.`);
+  console.log(`  Path: ${projectDir}`);
+  console.log("  Note: use /research-subscribe ... --project <id> to create heartbeat schedules.\n");
 }
 
-function showStatus(id: string): void {
-  const projects = listResearchProjects();
-  const project = projects.find((p) => p.id === id);
-  if (!project) {
+function showStatus(rawId: string): void {
+  const id = normalizeProjectId(rawId);
+  const projectDir = path.join(PROJECTS_ROOT, id);
+  if (!fs.existsSync(projectDir)) {
     console.error(`Error: research project '${id}' not found`);
     process.exit(1);
   }
 
-  const knowledgeDir = path.join(project.workspace, "metabolism", "knowledge");
-  const hypothesesDir = path.join(project.workspace, "metabolism", "hypotheses");
-  const diffsDir = path.join(project.workspace, "metabolism", "diffs");
+  const stateFile = path.join(projectDir, "knowledge_state", "state.json");
+  let streamCount = 0;
+  let totalRuns = 0;
+  let totalHypotheses = 0;
+  let lastStatus = "(unknown)";
+  let lastRunAtMs = 0;
 
-  let topicCount = 0;
-  let hypothesisCount = 0;
-  let latestDiffs: string[] = [];
+  try {
+    const state = JSON.parse(fs.readFileSync(stateFile, "utf-8")) as {
+      streams?: Record<string, { totalRuns?: number; totalHypotheses?: number; lastStatus?: string; lastRunAtMs?: number }>;
+    };
+    const streams = Object.values(state.streams ?? {});
+    streamCount = streams.length;
+    for (const s of streams) {
+      totalRuns += Number.isFinite(s.totalRuns) ? Math.max(0, Math.floor(s.totalRuns!)) : 0;
+      totalHypotheses += Number.isFinite(s.totalHypotheses) ? Math.max(0, Math.floor(s.totalHypotheses!)) : 0;
+      const ts = Number.isFinite(s.lastRunAtMs) ? Math.floor(s.lastRunAtMs!) : 0;
+      if (ts >= lastRunAtMs) {
+        lastRunAtMs = ts;
+        lastStatus = s.lastStatus ?? lastStatus;
+      }
+    }
+  } catch {
+    // no state yet
+  }
 
-  try {
-    topicCount = fs.readdirSync(knowledgeDir).filter((f) => f.startsWith("topic-")).length;
-  } catch { /* empty */ }
-  try {
-    hypothesisCount = fs.readdirSync(hypothesesDir).filter((f) => f.endsWith(".md")).length;
-  } catch { /* empty */ }
-  try {
-    latestDiffs = fs
-      .readdirSync(diffsDir)
-      .filter((f) => f.endsWith(".md"))
-      .sort()
-      .slice(-3);
-  } catch { /* empty */ }
+  const cronJobs = readCronJobs();
+  const relatedJobs = cronJobs.filter((job) => {
+    const name = (job.name ?? "").toLowerCase();
+    const msg = (job.payload?.message ?? "").toLowerCase();
+    return name.includes(id) || msg.includes(`--project ${id}`) || msg.includes(`project_id=${id}`);
+  });
 
   console.log(`\nResearch Project: ${id}`);
-  console.log(`  Agent:      ${project.agentId}`);
-  console.log(`  Workspace:  ${project.workspace}`);
-  console.log(`  Day:        ${project.currentDay}`);
-  console.log(`  Topics:     ${topicCount}`);
-  console.log(`  Hypotheses: ${hypothesisCount}`);
-  if (latestDiffs.length > 0) {
-    console.log(`  Recent diffs: ${latestDiffs.join(", ")}`);
+  console.log(`  Path: ${projectDir}`);
+  console.log(`  Streams: ${streamCount}`);
+  console.log(`  Total runs: ${totalRuns}`);
+  console.log(`  Total hypotheses: ${totalHypotheses}`);
+  console.log(`  Last status: ${lastStatus}`);
+  console.log(`  Last run: ${lastRunAtMs > 0 ? new Date(lastRunAtMs).toISOString() : "(none)"}`);
+  console.log(`  Related cron jobs: ${relatedJobs.length}`);
+  for (const job of relatedJobs.slice(0, 5)) {
+    console.log(`    - ${job.id ?? job.jobId ?? "(unknown-id)"} ${job.name ?? ""}`);
   }
-  if (project.createdAt) {
-    console.log(`  Created:    ${project.createdAt}`);
+  if (relatedJobs.length > 5) {
+    console.log(`    ... (${relatedJobs.length - 5} more)`);
   }
 }
 
-function deleteProject(id: string): void {
-  const agentId = `research-${id}`;
-  const workspace = path.join(OPENCLAW_HOME, `workspace-${agentId}`);
-
-  // Remove workspace
-  if (fs.existsSync(workspace)) {
-    fs.rmSync(workspace, { recursive: true, force: true });
-    console.log(`Deleted workspace: ${workspace}`);
+function deleteProject(rawId: string): void {
+  const id = normalizeProjectId(rawId);
+  const projectDir = path.join(PROJECTS_ROOT, id);
+  if (!fs.existsSync(projectDir)) {
+    console.error(`Error: project '${id}' not found`);
+    process.exit(1);
   }
 
-  // Remove from openclaw.json
-  const config = readOpenClawConfig();
-
-  const agents = config.agents as { list?: Array<{ id: string }> } | undefined;
-  if (agents?.list) {
-    agents.list = agents.list.filter((a) => a.id !== agentId);
+  fs.rmSync(projectDir, { recursive: true, force: true });
+  if (getActiveProject() === id) {
+    try {
+      fs.unlinkSync(ACTIVE_FILE);
+    } catch {
+      // ignore
+    }
   }
-
-  // Remove cron job
-  removeCronJob(agentId);
-
-  writeOpenClawConfig(config);
-
-  console.log(`Removed agent '${agentId}' from openclaw.json`);
-  console.log(`\nNote: If you created a Feishu group binding, remove it manually in the Gateway web UI.`);
+  console.log(`Deleted project: ${id}`);
+  console.log("Note: cron jobs are not auto-removed. Use /research-unsubscribe or openclaw cron list/remove.");
 }
 
 /**
  * Register the `openclaw research` CLI command.
+ * Compatibility alias over unified project/cron architecture.
  */
 export function registerResearchCli(
-  api: { registerCli: (registrar: unknown, opts?: { commands?: string[] }) => void; source: string },
+  api: { registerCli: (registrar: unknown, opts?: { commands?: string[] }) => void },
 ) {
-  const entryDir = path.dirname(api.source);
-
   api.registerCli(
     ({ program }: { program: { command: (name: string) => unknown } }) => {
       const cmd = program.command("research") as {
         description: (desc: string) => unknown;
         command: (name: string) => {
           description: (desc: string) => unknown;
-          argument?: (name: string, desc: string) => unknown;
-          option?: (flags: string, desc: string) => unknown;
           action: (fn: (...args: unknown[]) => void) => unknown;
         };
       };
-      cmd.description("Manage CKM research projects");
+      cmd.description("Manage continuous research engine projects (compatibility alias)");
 
-      const pluginSkillsDir = findPluginSkillsDir(entryDir);
-
-      // openclaw research init <id>
       const initCmd = cmd.command("init <id>");
-      initCmd.description("Create a new research project agent + workspace");
-      initCmd.action((id: unknown) => {
-        initProject(String(id), pluginSkillsDir);
-      });
+      initCmd.description("Initialize a project under ~/.openclaw/workspace/projects/<id>");
+      initCmd.action((id: unknown) => initProject(String(id)));
 
-      // openclaw research list
       const listCmd = cmd.command("list");
-      listCmd.description("List all research projects");
+      listCmd.description("List unified workspace projects");
       listCmd.action(() => {
-        const projects = listResearchProjects();
+        const projects = listProjects();
+        const active = getActiveProject();
         if (projects.length === 0) {
-          console.log("No research projects found.");
+          console.log("No projects found.");
           return;
         }
-        console.log("\nResearch Projects:\n");
-        for (const p of projects) {
-          const configured = p.currentDay > 0 || p.createdAt ? "" : " (pending BOOTSTRAP)";
-          console.log(`  ${p.id}  Day ${p.currentDay}${configured}`);
-          console.log(`    ${p.workspace}`);
+        console.log("\nProjects:\n");
+        for (const id of projects) {
+          const marker = id === active ? "*" : " ";
+          console.log(` ${marker} ${id}`);
         }
         console.log();
       });
 
-      // openclaw research status <id>
       const statusCmd = cmd.command("status <id>");
-      statusCmd.description("Show research project metabolism status");
-      statusCmd.action((id: unknown) => {
-        showStatus(String(id));
-      });
+      statusCmd.description("Show project status from unified knowledge_state");
+      statusCmd.action((id: unknown) => showStatus(String(id)));
 
-      // openclaw research delete <id>
       const deleteCmd = cmd.command("delete <id>");
-      deleteCmd.description("Delete a research project (agent + workspace + cron)");
-      deleteCmd.action((id: unknown) => {
-        deleteProject(String(id));
-      });
+      deleteCmd.description("Delete a project from unified workspace (compatibility)");
+      deleteCmd.action((id: unknown) => deleteProject(String(id)));
     },
     { commands: ["research"] },
   );

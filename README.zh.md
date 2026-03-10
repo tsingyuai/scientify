@@ -336,7 +336,7 @@ openclaw gateway
 | `unpaywall_download` | 通过 Unpaywall API 按 DOI 下载开放获取 PDF。非 OA 论文跳过不报错。 |
 | `github_search` | 搜索 GitHub 仓库，返回仓库名、描述、star 数、URL。支持语言过滤和排序。 |
 | `paper_browser` | 分页浏览大型论文文件（.tex/.md），避免一次性加载数千行到上下文。返回指定行范围和导航信息。 |
-| `scientify_cron_job` | 由模型管理 Scientify 定时任务（`upsert`/`list`/`remove`）。主要参数：`action`、`scope`、`schedule`、`topic`、`project`、`message`、`max_papers`、`recency_days`、`candidate_pool`、`score_weights`、`sources`、`channel`、`to`、`no_deliver`、`job_id`。 |
+| `scientify_cron_job` | 由模型管理 Scientify 定时任务（`upsert`/`list`/`remove`）。主要参数：`action`、`scope`、`schedule`、`topic`、`project`、`message`、`max_papers`、`recency_days`、`candidate_pool`、`score_weights`、`sources`、`channel`、`to`、`no_deliver`、`run_now`、`job_id`。当 `run_now=true` 且是研究任务时，还会返回 `status_json` 快照。 |
 | `scientify_literature_state` | 订阅增量状态工具：`prepare` 获取去重上下文（含记忆提示）、`record` 记录已推送论文 + 项目级 `knowledge_state` 产物（含 `paper_notes` 深读字段与全文临时清理日志）、`feedback` 写入轻量偏好记忆、`status` 查看状态与可追溯日志。 |
 
 ### Commands（直接执行，不经 LLM）
@@ -352,6 +352,7 @@ openclaw gateway
 | `/research-subscribe ...` | 创建/更新定时 Scientify 任务（支持 `daily`、`weekly`、`every`、`at`、`cron`；可选参数：`--channel`、`--to`、`--topic`、`--project`、`--message`、`--max-papers`、`--recency-days`、`--candidate-pool`、`--score-weights`、`--sources`、`--no-deliver`） |
 | `/research-subscriptions` | 查看你的 Scientify 定时任务 |
 | `/research-unsubscribe [job-id]` | 取消你的 Scientify 定时任务（或删除指定任务） |
+| `/metabolism-status` | 兼容别名：查看项目 `knowledge_state` 摘要 |
 
 `/research-subscribe` 示例：
 - `/research-subscribe daily 09:00 Asia/Shanghai`（默认尽量推送到当前消息来源的用户/频道）
@@ -381,6 +382,7 @@ openclaw gateway
 - 全文文件建议下载到临时目录并在每轮后清理，清理结果会写入 `knowledge_state` 的 run log。
 - 存储位置：订阅任务保存在 OpenClaw cron 存储中；知识状态产物写入项目 workspace 文件。
 - 全局查看：`openclaw cron list --all --json`
+- 兼容别名：`openclaw research init/list/status/delete` 与 `/metabolism-status` 保留用于迁移，内部都走统一的 `projects/*/knowledge_state` 架构。
 
 ---
 

@@ -32,7 +32,6 @@ import {
   createScientifyUsageCleanupHook,
   createScientifyUsageTrackerHook,
 } from "./src/hooks/scientify-signature.js";
-import { createCronSkillInjectionHook } from "./src/hooks/cron-skill-inject.js";
 import { registerResearchCli } from "./src/cli/research.js";
 import { handleMetabolismStatus } from "./src/commands/metabolism-status.js";
 
@@ -167,16 +166,13 @@ export default function register(api: OpenClawPluginApi) {
     priority: 90,
   });
 
-  // Inject SKILL.md into cron session messages (for metabolism heartbeat).
-  api.on("before_agent_start", createCronSkillInjectionHook());
-
   // Register CLI commands: openclaw research init/list/status/delete
   registerResearchCli(api);
 
-  // Register metabolism chat commands
+  // Compatibility alias command over unified knowledge_state
   api.registerCommand({
     name: "metabolism-status",
-    description: "Show knowledge metabolism status (day, topics, hypotheses)",
+    description: "Compatibility alias: show continuous research engine status",
     acceptsArgs: false,
     requireAuth: false,
     handler: handleMetabolismStatus,

@@ -336,7 +336,7 @@ You can also check status anytime with:
 | `unpaywall_download` | Download open access PDFs by DOI via Unpaywall API. Non-OA papers are silently skipped (no failure). |
 | `github_search` | Search GitHub repositories. Returns repo name, description, stars, URL. Supports language filtering and sorting. |
 | `paper_browser` | Paginated browsing of large paper files (.tex/.md) to avoid loading thousands of lines into context. Returns specified line range with navigation info. |
-| `scientify_cron_job` | Manage scheduled Scientify jobs from the model (`upsert`/`list`/`remove`). Main fields: `action`, `scope`, `schedule`, `topic`, `project`, `message`, `max_papers`, `recency_days`, `candidate_pool`, `score_weights`, `sources`, `channel`, `to`, `no_deliver`, `job_id`. |
+| `scientify_cron_job` | Manage scheduled Scientify jobs from the model (`upsert`/`list`/`remove`). Main fields: `action`, `scope`, `schedule`, `topic`, `project`, `message`, `max_papers`, `recency_days`, `candidate_pool`, `score_weights`, `sources`, `channel`, `to`, `no_deliver`, `run_now`, `job_id`. `run_now=true` also returns a `status_json` snapshot for research tasks. |
 | `scientify_literature_state` | Persistent incremental state for subscriptions: `prepare` dedupe context (+ memory hints), `record` pushed papers + project `knowledge_state` artifacts (including `paper_notes` deep-reading fields and full-text cleanup run logs), `feedback` lightweight preference memory, and `status` inspection with traceable logs. |
 
 ### Commands (direct, no LLM)
@@ -352,6 +352,7 @@ You can also check status anytime with:
 | `/research-subscribe ...` | Create/update scheduled Scientify jobs (supports `daily`, `weekly`, `every`, `at`, `cron`; options: `--channel`, `--to`, `--topic`, `--project`, `--message`, `--max-papers`, `--recency-days`, `--candidate-pool`, `--score-weights`, `--sources`, `--no-deliver`) |
 | `/research-subscriptions` | Show your scheduled Scientify jobs |
 | `/research-unsubscribe [job-id]` | Remove your scheduled Scientify jobs (or a specific job) |
+| `/metabolism-status` | Compatibility alias view over project `knowledge_state` summary |
 
 `/research-subscribe` examples:
 - `/research-subscribe daily 09:00 Asia/Shanghai` (auto-deliver to current chat sender/channel when possible)
@@ -381,6 +382,7 @@ Behavior notes:
 - Full-text files should be downloaded to a temporary directory and cleaned after each run; cleanup result is tracked in `knowledge_state` run logs.
 - Storage: subscription jobs are stored in OpenClaw cron storage; knowledge artifacts are stored in project workspace files.
 - Global inspect: `openclaw cron list --all --json`
+- Compatibility aliases: `openclaw research init/list/status/delete` and `/metabolism-status` are retained for migration, but internally use the same unified `projects/*/knowledge_state` architecture.
 
 ---
 

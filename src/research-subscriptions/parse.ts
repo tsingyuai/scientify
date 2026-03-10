@@ -388,6 +388,7 @@ export function parseSubscribeOptions(rawArgs: string | undefined): Subscription
   let projectId: string | undefined;
   let topic: string | undefined;
   let message: string | undefined;
+  let metadataOnly = false;
   let maxPapers: number | undefined;
   let recencyDays: number | undefined;
   let sources: string[] | undefined;
@@ -420,6 +421,16 @@ export function parseSubscribeOptions(rawArgs: string | undefined): Subscription
 
     if (token === "--no-deliver") {
       noDeliver = true;
+      continue;
+    }
+
+    if (token === "--metadata-only" || token === "--no-fulltext") {
+      metadataOnly = true;
+      continue;
+    }
+
+    if (token === "--fulltext") {
+      metadataOnly = false;
       continue;
     }
 
@@ -552,6 +563,7 @@ export function parseSubscribeOptions(rawArgs: string | undefined): Subscription
     channelOverride,
     toOverride,
     projectId,
+    ...(metadataOnly ? { metadataOnly: true } : {}),
     noDeliver,
     topic,
     message,

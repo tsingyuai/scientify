@@ -23,6 +23,7 @@ import type {
   KnowledgeChangeInput,
   KnowledgeHypothesisInput,
   KnowledgePaperInput,
+  RunProfile,
   KnowledgeStateRoot,
   KnowledgeStateSummary,
   KnowledgeStreamState,
@@ -30,6 +31,7 @@ import type {
   RecentChangeStat,
   RecentHypothesisSummary,
   ReflectionTaskInput,
+  TriggerState,
 } from "./types.js";
 
 const STATE_VERSION = 1 as const;
@@ -44,9 +46,25 @@ const MAX_HYPOTHESIS_REJECTION_REASONS = 24;
 const MIN_CORE_FULLTEXT_COVERAGE = 0.8;
 const MIN_EVIDENCE_BINDING_RATE = 0.9;
 const MAX_CITATION_ERROR_RATE = 0.02;
+const MIN_FULLTEXT_PROFILE_COMPLETENESS = 0.55;
 const MIN_HYPOTHESIS_EVIDENCE = 2;
 const MIN_HYPOTHESIS_DEPENDENCY_STEPS = 2;
 const MIN_HYPOTHESIS_STATEMENT_CHARS = 48;
+const PLACEHOLDER_TEXT_RE =
+  /^(?:n\/a|na|none|not provided|not available|unknown|tbd|todo|null|nil|未提供|暂无|未知|无)$/iu;
+
+function defaultRunProfile(): RunProfile {
+  return "strict";
+}
+
+function defaultTriggerState(nowMs = Date.now()): TriggerState {
+  return {
+    consecutiveNewReviseDays: 0,
+    bridgeCount7d: 0,
+    unreadCoreBacklog: 0,
+    lastUpdatedAtMs: nowMs,
+  };
+}
 
 function defaultQualityGateState(): {
   passed: boolean;
@@ -74,6 +92,14 @@ function defaultHypothesisGateState(): HypothesisGateSummary {
 
 function normalizeText(raw: string): string {
   return raw.trim().replace(/\s+/g, " ");
+}
+
+function cleanOptionalText(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const normalized = normalizeText(raw);
+  if (!normalized) return undefined;
+  if (PLACEHOLDER_TEXT_RE.test(normalized)) return undefined;
+  return normalized;
 }
 
 function sanitizeId(raw: string): string {
@@ -169,6 +195,10 @@ async function loadState(projectPath: string): Promise<KnowledgeStateRoot> {
         topic: normalizeText(rawStream.topic ?? "topic"),
         topicKey,
         projectId: sanitizeId(rawStream.projectId ?? "auto-topic-global-000000") || "auto-topic-global-000000",
+        lastRunProfile:
+          rawStream.lastRunProfile === "strict" || rawStream.lastRunProfile === "fast"
+            ? rawStream.lastRunProfile
+            : defaultRunProfile(),
         totalRuns: typeof rawStream.totalRuns === "number" ? Math.max(0, Math.floor(rawStream.totalRuns)) : 0,
         totalHypotheses:
           typeof rawStream.totalHypotheses === "number" ? Math.max(0, Math.floor(rawStream.totalHypotheses)) : 0,
@@ -178,6 +208,31 @@ async function loadState(projectPath: string): Promise<KnowledgeStateRoot> {
         paperNotes: Array.isArray(rawStream.paperNotes)
           ? rawStream.paperNotes.filter((item): item is string => typeof item === "string").map((item) => normalizeText(item))
           : [],
+        triggerState:
+          rawStream.triggerState && typeof rawStream.triggerState === "object" && !Array.isArray(rawStream.triggerState)
+            ? {
+                consecutiveNewReviseDays:
+                  typeof rawStream.triggerState.consecutiveNewReviseDays === "number" &&
+                  Number.isFinite(rawStream.triggerState.consecutiveNewReviseDays)
+                    ? Math.max(0, Math.floor(rawStream.triggerState.consecutiveNewReviseDays))
+                    : 0,
+                bridgeCount7d:
+                  typeof rawStream.triggerState.bridgeCount7d === "number" &&
+                  Number.isFinite(rawStream.triggerState.bridgeCount7d)
+                    ? Math.max(0, Math.floor(rawStream.triggerState.bridgeCount7d))
+                    : 0,
+                unreadCoreBacklog:
+                  typeof rawStream.triggerState.unreadCoreBacklog === "number" &&
+                  Number.isFinite(rawStream.triggerState.unreadCoreBacklog)
+                    ? Math.max(0, Math.floor(rawStream.triggerState.unreadCoreBacklog))
+                    : 0,
+                lastUpdatedAtMs:
+                  typeof rawStream.triggerState.lastUpdatedAtMs === "number" &&
+                  Number.isFinite(rawStream.triggerState.lastUpdatedAtMs)
+                    ? Math.floor(rawStream.triggerState.lastUpdatedAtMs)
+                    : Date.now(),
+              }
+            : defaultTriggerState(),
         recentFullTextReadCount:
           typeof rawStream.recentFullTextReadCount === "number"
             ? Math.max(0, Math.floor(rawStream.recentFullTextReadCount))
@@ -321,8 +376,8 @@ function normalizeStringArray(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const values = raw
     .filter((item): item is string => typeof item === "string")
-    .map((item) => normalizeText(item))
-    .filter((item) => item.length > 0);
+    .map((item) => cleanOptionalText(item))
+    .filter((item): item is string => Boolean(item));
   return values.length > 0 ? values : undefined;
 }
 
@@ -333,13 +388,13 @@ function normalizeEvidenceAnchors(
   const anchors = raw
     .filter((item): item is NonNullable<KnowledgePaperInput["evidenceAnchors"]>[number] => !!item && typeof item === "object")
     .map((item) => {
-      const claim = normalizeText(item.claim ?? "");
+      const claim = cleanOptionalText(item.claim);
       if (!claim) return undefined;
       return {
-        ...(item.section ? { section: normalizeText(item.section) } : {}),
-        ...(item.locator ? { locator: normalizeText(item.locator) } : {}),
+        ...(cleanOptionalText(item.section) ? { section: cleanOptionalText(item.section) } : {}),
+        ...(cleanOptionalText(item.locator) ? { locator: cleanOptionalText(item.locator) } : {}),
         claim,
-        ...(item.quote ? { quote: normalizeText(item.quote) } : {}),
+        ...(cleanOptionalText(item.quote) ? { quote: cleanOptionalText(item.quote) } : {}),
       };
     })
     .filter((item): item is NonNullable<KnowledgePaperInput["evidenceAnchors"]>[number] => Boolean(item));
@@ -359,7 +414,7 @@ function toPaperNoteSlug(paper: KnowledgePaperInput): string {
 
 function normalizePaper(input: KnowledgePaperInput): KnowledgePaperInput {
   const evidenceIds = Array.isArray(input.evidenceIds)
-    ? input.evidenceIds.map((id) => normalizeText(id)).filter((id) => id.length > 0)
+    ? input.evidenceIds.map((id) => cleanOptionalText(id)).filter((id): id is string => Boolean(id))
     : undefined;
   const keyEvidenceSpans = normalizeStringArray(input.keyEvidenceSpans);
   const subdomains = normalizeStringArray(input.subdomains);
@@ -382,31 +437,33 @@ function normalizePaper(input: KnowledgePaperInput): KnowledgePaperInput {
         : readStatus
           ? false
           : undefined;
-  const unreadReason = input.unreadReason ? normalizeText(input.unreadReason) : undefined;
+  const unreadReason = cleanOptionalText(input.unreadReason);
   return {
-    ...(input.id ? { id: normalizeText(input.id) } : {}),
-    ...(input.title ? { title: normalizeText(input.title) } : {}),
-    ...(input.url ? { url: normalizeText(input.url) } : {}),
-    ...(input.source ? { source: normalizeText(input.source) } : {}),
-    ...(input.publishedAt ? { publishedAt: normalizeText(input.publishedAt) } : {}),
+    ...(cleanOptionalText(input.id) ? { id: cleanOptionalText(input.id) } : {}),
+    ...(cleanOptionalText(input.title) ? { title: cleanOptionalText(input.title) } : {}),
+    ...(cleanOptionalText(input.url) ? { url: cleanOptionalText(input.url) } : {}),
+    ...(cleanOptionalText(input.source) ? { source: cleanOptionalText(input.source) } : {}),
+    ...(cleanOptionalText(input.publishedAt) ? { publishedAt: cleanOptionalText(input.publishedAt) } : {}),
     ...(typeof input.score === "number" && Number.isFinite(input.score)
       ? { score: Number(input.score.toFixed(2)) }
       : {}),
-    ...(input.reason ? { reason: normalizeText(input.reason) } : {}),
-    ...(input.summary ? { summary: normalizeText(input.summary) } : {}),
+    ...(cleanOptionalText(input.reason) ? { reason: cleanOptionalText(input.reason) } : {}),
+    ...(cleanOptionalText(input.summary) ? { summary: cleanOptionalText(input.summary) } : {}),
     ...(evidenceIds && evidenceIds.length > 0 ? { evidenceIds } : {}),
     ...(typeof fullTextRead === "boolean" ? { fullTextRead } : {}),
     ...(readStatus ? { readStatus } : {}),
-    ...(input.fullTextSource ? { fullTextSource: normalizeText(input.fullTextSource) } : {}),
-    ...(input.fullTextRef ? { fullTextRef: normalizeText(input.fullTextRef) } : {}),
+    ...(cleanOptionalText(input.fullTextSource) ? { fullTextSource: cleanOptionalText(input.fullTextSource) } : {}),
+    ...(cleanOptionalText(input.fullTextRef) ? { fullTextRef: cleanOptionalText(input.fullTextRef) } : {}),
     ...(unreadReason ? { unreadReason } : {}),
     ...(keyEvidenceSpans && keyEvidenceSpans.length > 0 ? { keyEvidenceSpans } : {}),
-    ...(input.domain ? { domain: normalizeText(input.domain) } : {}),
+    ...(cleanOptionalText(input.domain) ? { domain: cleanOptionalText(input.domain) } : {}),
     ...(subdomains ? { subdomains } : {}),
     ...(crossDomainLinks ? { crossDomainLinks } : {}),
-    ...(input.researchGoal ? { researchGoal: normalizeText(input.researchGoal) } : {}),
-    ...(input.approach ? { approach: normalizeText(input.approach) } : {}),
-    ...(input.methodologyDesign ? { methodologyDesign: normalizeText(input.methodologyDesign) } : {}),
+    ...(cleanOptionalText(input.researchGoal) ? { researchGoal: cleanOptionalText(input.researchGoal) } : {}),
+    ...(cleanOptionalText(input.approach) ? { approach: cleanOptionalText(input.approach) } : {}),
+    ...(cleanOptionalText(input.methodologyDesign)
+      ? { methodologyDesign: cleanOptionalText(input.methodologyDesign) }
+      : {}),
     ...(keyContributions ? { keyContributions } : {}),
     ...(practicalInsights ? { practicalInsights } : {}),
     ...(mustUnderstandPoints ? { mustUnderstandPoints } : {}),
@@ -526,6 +583,22 @@ function hasStructuredProfile(paper: KnowledgePaperInput): boolean {
   );
 }
 
+function countStructuredProfileFields(paper: KnowledgePaperInput): number {
+  let count = 0;
+  if (paper.domain && paper.domain.trim()) count += 1;
+  if (paper.subdomains && paper.subdomains.length > 0) count += 1;
+  if (paper.crossDomainLinks && paper.crossDomainLinks.length > 0) count += 1;
+  if (paper.researchGoal && paper.researchGoal.trim()) count += 1;
+  if (paper.approach && paper.approach.trim()) count += 1;
+  if (paper.methodologyDesign && paper.methodologyDesign.trim()) count += 1;
+  if (paper.keyContributions && paper.keyContributions.length > 0) count += 1;
+  if (paper.practicalInsights && paper.practicalInsights.length > 0) count += 1;
+  if (paper.mustUnderstandPoints && paper.mustUnderstandPoints.length > 0) count += 1;
+  if (paper.limitations && paper.limitations.length > 0) count += 1;
+  if (paper.evidenceAnchors && paper.evidenceAnchors.length > 0) count += 1;
+  return count;
+}
+
 function isFullTextRead(paper: KnowledgePaperInput): boolean {
   return paper.fullTextRead === true || paper.readStatus === "fulltext";
 }
@@ -598,6 +671,14 @@ function applyQualityGates(args: {
   const fullTextCoreCount = corePapers.filter((paper) => isFullTextRead(paper)).length;
   const fullTextCoverage = coreCount > 0 ? fullTextCoreCount / coreCount : 0;
   const fullTextCoveragePct = Number((fullTextCoverage * 100).toFixed(2));
+  const fullTextCorePapers = corePapers.filter((paper) => isFullTextRead(paper));
+  const structuredFieldTotal = 11;
+  const avgFullTextProfileCompleteness =
+    fullTextCorePapers.length > 0
+      ? fullTextCorePapers.reduce((sum, paper) => sum + countStructuredProfileFields(paper) / structuredFieldTotal, 0) /
+        fullTextCorePapers.length
+      : 0;
+  const avgFullTextProfileCompletenessPct = Number((avgFullTextProfileCompleteness * 100).toFixed(2));
 
   const unreadCorePaperIds = dedupeText(
     corePapers
@@ -689,6 +770,11 @@ function applyQualityGates(args: {
       `core_fulltext_coverage_below_threshold(${fullTextCoveragePct}% < ${Number((MIN_CORE_FULLTEXT_COVERAGE * 100).toFixed(0))}%)`,
     );
   }
+  if (fullTextCorePapers.length > 0 && avgFullTextProfileCompleteness < MIN_FULLTEXT_PROFILE_COMPLETENESS) {
+    reasons.push(
+      `fulltext_profile_completeness_below_threshold(${avgFullTextProfileCompletenessPct}% < ${Number((MIN_FULLTEXT_PROFILE_COMPLETENESS * 100).toFixed(0))}%)`,
+    );
+  }
   if (
     typeof args.requiredFullTextCoveragePct === "number" &&
     Number.isFinite(args.requiredFullTextCoveragePct) &&
@@ -710,9 +796,16 @@ function applyQualityGates(args: {
     );
   }
   const bridgeChangeCount = args.knowledgeChanges.filter((item) => item.type === "BRIDGE").length;
+  const reviseCount = args.knowledgeChanges.filter((item) => item.type === "REVISE").length;
+  const confirmCount = args.knowledgeChanges.filter((item) => item.type === "CONFIRM").length;
   const executedReflectionCount = args.reflectionTasks.filter((task) => task.status === "executed").length;
   if (bridgeChangeCount > 0 && executedReflectionCount === 0) {
     reasons.push(`reflection_missing_for_bridge(bridge_count=${bridgeChangeCount})`);
+  }
+  if (reviseCount > 0 && confirmCount > 0 && executedReflectionCount === 0) {
+    reasons.push(
+      `reflection_missing_for_conflict(revise_count=${reviseCount},confirm_count=${confirmCount})`,
+    );
   }
   if (args.hypothesisGate.rejected > 0 && args.hypothesisGate.accepted === 0 && args.hypotheses.length > 0) {
     reasons.push(`hypothesis_gate_rejected_all(${args.hypothesisGate.rejected})`);
@@ -844,10 +937,12 @@ function toSummary(stream: KnowledgeStreamState): KnowledgeStateSummary {
   return {
     projectId: stream.projectId,
     streamKey: stream.topicKey,
+    runProfile: stream.lastRunProfile,
     totalRuns: stream.totalRuns,
     totalHypotheses: stream.totalHypotheses,
     knowledgeTopicsCount: stream.knowledgeTopics.length,
     paperNotesCount: stream.paperNotes.length,
+    triggerState: stream.triggerState,
     recentFullTextReadCount: stream.recentFullTextReadCount,
     recentNotFullTextReadCount: stream.recentNotFullTextReadCount,
     qualityGate: stream.lastQualityGate,
@@ -1066,6 +1161,7 @@ function applyHypothesisGate(args: {
   hypotheses: KnowledgeHypothesisInput[];
   allRunPapers: KnowledgePaperInput[];
   knowledgeChanges: KnowledgeChangeInput[];
+  runProfile: RunProfile;
 }): {
   acceptedHypotheses: KnowledgeHypothesisInput[];
   gate: HypothesisGateSummary;
@@ -1103,8 +1199,11 @@ function applyHypothesisGate(args: {
     if (resolvedEvidence < evidenceIds.length) {
       reasons.push(`unresolved_evidence_ids(${evidenceIds.length - resolvedEvidence})`);
     }
-    if (fullTextSupported === 0) {
+    if (fullTextSupported === 0 && args.runProfile === "strict") {
       reasons.push("no_fulltext_backed_evidence");
+    }
+    if (resolvedEvidence === 0) {
+      reasons.push("no_resolved_evidence");
     }
 
     const dependencyPathLength = hypothesis.dependencyPath?.length ?? 0;
@@ -1149,6 +1248,56 @@ function applyHypothesisGate(args: {
       rejected: Math.max(0, args.hypotheses.length - acceptedHypotheses.length),
       rejectionReasons: [...rejectionReasonSet].slice(0, MAX_HYPOTHESIS_REJECTION_REASONS),
     },
+  };
+}
+
+function toDayStartMs(day: string): number | undefined {
+  const ts = Date.parse(`${day}T00:00:00.000Z`);
+  return Number.isFinite(ts) ? ts : undefined;
+}
+
+function deriveTriggerState(args: {
+  recentChangeStats: RecentChangeStat[];
+  unreadCoreBacklog: number;
+  nowMs: number;
+}): TriggerState {
+  const sorted = [...args.recentChangeStats].sort((a, b) => b.day.localeCompare(a.day));
+
+  // consecutive days from latest day with NEW/REVISE > 0
+  let consecutiveNewReviseDays = 0;
+  let expectedDayMs: number | undefined;
+  for (const item of sorted) {
+    const dayMs = toDayStartMs(item.day);
+    if (dayMs === undefined) continue;
+    const hasSignal = item.newCount > 0 || item.reviseCount > 0;
+    if (!hasSignal) break;
+    if (expectedDayMs === undefined) {
+      consecutiveNewReviseDays = 1;
+      expectedDayMs = dayMs - 24 * 60 * 60 * 1000;
+      continue;
+    }
+    if (dayMs === expectedDayMs) {
+      consecutiveNewReviseDays += 1;
+      expectedDayMs = dayMs - 24 * 60 * 60 * 1000;
+      continue;
+    }
+    break;
+  }
+
+  const sevenDaysAgo = args.nowMs - 7 * 24 * 60 * 60 * 1000;
+  let bridgeCount7d = 0;
+  for (const item of sorted) {
+    const dayMs = toDayStartMs(item.day);
+    if (dayMs === undefined) continue;
+    if (dayMs < sevenDaysAgo) continue;
+    bridgeCount7d += Math.max(0, Math.floor(item.bridgeCount));
+  }
+
+  return {
+    consecutiveNewReviseDays,
+    bridgeCount7d,
+    unreadCoreBacklog: Math.max(0, Math.floor(args.unreadCoreBacklog)),
+    lastUpdatedAtMs: args.nowMs,
   };
 }
 
@@ -1222,10 +1371,12 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
         topic: normalizeText(input.topic),
         topicKey: streamKey,
         projectId: project.projectId,
+        lastRunProfile: defaultRunProfile(),
         totalRuns: 0,
         totalHypotheses: 0,
         knowledgeTopics: [],
         paperNotes: [],
+        triggerState: defaultTriggerState(),
         recentFullTextReadCount: 0,
         recentNotFullTextReadCount: 0,
         lastQualityGate: defaultQualityGateState(),
@@ -1244,26 +1395,44 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
       .map((paper) => paper.id || paper.url || paper.title || "")
       .map((value) => normalizeText(value))
       .filter((value) => value.length > 0);
-    const runId = input.runId?.trim()
-      ? sanitizeId(input.runId)
-      : buildRunFingerprint({
-          scope: stream.scope,
-          topic: stream.topic,
-          status: input.status,
-          day: dayKey,
-          paperIds,
-          note: input.note,
-        });
+    const explicitRunId = input.runId?.trim() ? sanitizeId(input.runId) : undefined;
+    let runId =
+      explicitRunId ??
+      buildRunFingerprint({
+        scope: stream.scope,
+        topic: stream.topic,
+        status: input.status,
+        day: dayKey,
+        paperIds,
+        note: input.note,
+      });
+
+    const inferredRunProfile: RunProfile =
+      input.knowledgeState?.runLog?.runProfile === "strict" || input.knowledgeState?.runLog?.runProfile === "fast"
+        ? input.knowledgeState.runLog.runProfile
+        : input.knowledgeState?.runLog?.requiredCorePapers !== undefined ||
+            input.knowledgeState?.runLog?.requiredFullTextCoveragePct !== undefined
+          ? "strict"
+          : defaultRunProfile();
 
     if (stream.recentRunIds.includes(runId)) {
-      root.streams[streamKey] = stream;
-      return {
-        projectId: project.projectId,
-        streamKey,
-        summary: toSummary(stream),
-        runId,
-        createdProject: project.created,
-      };
+      // Preserve idempotency for fingerprint-based runs, but avoid silently dropping
+      // valid new cron cycles that accidentally reuse an explicit run_id.
+      if (!explicitRunId) {
+        root.streams[streamKey] = stream;
+        return {
+          projectId: project.projectId,
+          streamKey,
+          summary: toSummary(stream),
+          runId,
+          createdProject: project.created,
+        };
+      }
+      const collisionTag = createHash("sha1")
+        .update(`${nowMs}\n${paperIds.join("|")}\n${input.status ?? ""}\n${input.note ?? ""}`)
+        .digest("hex")
+        .slice(0, 8);
+      runId = `${runId}-r${collisionTag}`;
     }
 
     const rootPath = getKnowledgeStateRoot(project.projectPath);
@@ -1318,6 +1487,7 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
       hypotheses: submittedHypotheses,
       allRunPapers: mergedRunPapers,
       knowledgeChanges,
+      runProfile: inferredRunProfile,
     });
     const acceptedHypotheses = hypothesisEval.acceptedHypotheses;
     const qualityEval = applyQualityGates({
@@ -1332,6 +1502,12 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
       requiredCorePapers: input.knowledgeState?.runLog?.requiredCorePapers,
       requiredFullTextCoveragePct: input.knowledgeState?.runLog?.requiredFullTextCoveragePct,
     });
+    if (changeSanitization.droppedBridgeCount > 0) {
+      qualityEval.qualityGate.passed = false;
+      qualityEval.qualityGate.reasons.push(
+        `bridge_dropped_due_to_ungrounded_evidence(${changeSanitization.droppedBridgeCount})`,
+      );
+    }
     const requestedStatus = normalizeText(input.status ?? "ok");
     const qualitySensitiveStatus = requestedStatus === "ok" || requestedStatus === "fallback_representative";
     const effectiveStatus =
@@ -1408,6 +1584,7 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
       renderKnowledgeIndexMarkdown({
         now: nowIso,
         topic: stream.topic,
+        runProfile: inferredRunProfile,
         topicFiles: stream.knowledgeTopics,
         paperNotesCount: stream.paperNotes.length,
         totalHypotheses: stream.totalHypotheses + recentHypothesisSummaries.length,
@@ -1426,6 +1603,7 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
     const changeStat = countChangeStats(dayKey, runId, knowledgeChanges);
 
     stream.projectId = project.projectId;
+    stream.lastRunProfile = inferredRunProfile;
     stream.totalRuns += 1;
     stream.totalHypotheses += recentHypothesisSummaries.length;
     stream.lastRunAtMs = nowMs;
@@ -1445,6 +1623,11 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
     ].slice(0, MAX_RECENT_HYPOTHESES);
     stream.recentHypotheses = [...recentHypothesisSummaries, ...stream.recentHypotheses].slice(0, MAX_RECENT_HYPOTHESES);
     stream.recentChangeStats = [changeStat, ...stream.recentChangeStats].slice(0, MAX_RECENT_CHANGE_STATS);
+    stream.triggerState = deriveTriggerState({
+      recentChangeStats: stream.recentChangeStats,
+      unreadCoreBacklog: qualityEval.unreadCorePaperIds.length,
+      nowMs,
+    });
 
     root.streams[streamKey] = stream;
     await saveStateAtomic(project.projectPath, root);
@@ -1453,7 +1636,9 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
       path.join(logDir, `day-${dayKey}-run-details.jsonl`),
       `${JSON.stringify({
         ts: nowMs,
+        run_id: runId,
         runId,
+        run_profile: inferredRunProfile,
         scope: stream.scope,
         topic: stream.topic,
         streamKey,
@@ -1487,7 +1672,9 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
 
     await appendEvent(project.projectPath, {
       ts: nowMs,
+      run_id: runId,
       runId,
+      run_profile: inferredRunProfile,
       scope: stream.scope,
       topic: stream.topic,
       streamKey,
@@ -1509,6 +1696,7 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
       hypothesisCount: recentHypothesisSummaries.length,
       submittedHypothesisCount: submittedHypotheses.length,
       hypothesisGate: hypothesisEval.gate,
+      triggerState: stream.triggerState,
       reflectionTasks,
       corePapers,
       explorationPapers,

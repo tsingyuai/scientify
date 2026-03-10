@@ -148,6 +148,11 @@ const KnowledgeHypothesisSchema = Type.Object({
 
 const KnowledgeRunLogSchema = Type.Object({
   model: Type.Optional(Type.String({ description: "Optional model name." })),
+  run_profile: Type.Optional(
+    Type.String({
+      description: "Optional run profile: fast | strict.",
+    }),
+  ),
   duration_ms: Type.Optional(Type.Number({ description: "Optional run duration in ms." })),
   error: Type.Optional(Type.String({ description: "Optional run error text." })),
   degraded: Type.Optional(Type.Boolean({ description: "Whether this run used degraded behavior." })),
@@ -214,6 +219,21 @@ export const ScientifyLiteratureStateToolSchema = Type.Object({
       description: "Optional cron run/session id for traceability.",
     }),
   ),
+  run_profile: Type.Optional(
+    Type.String({
+      description: "Optional run profile override: fast | strict.",
+    }),
+  ),
+  required_core_papers: Type.Optional(
+    Type.Number({
+      description: "Optional hard requirement for minimum core papers in this run.",
+    }),
+  ),
+  required_full_text_coverage_pct: Type.Optional(
+    Type.Number({
+      description: "Optional hard requirement for minimum core full-text coverage in this run.",
+    }),
+  ),
   note: Type.Optional(
     Type.String({
       description: "Optional note for this record.",
@@ -251,6 +271,12 @@ function readStringParam(params: Record<string, unknown>, key: string): string |
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function readNumberParam(params: Record<string, unknown>, key: string): number | undefined {
+  const value = params[key];
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return value;
 }
 
 function readPreferences(params: Record<string, unknown>): Partial<LightweightPreferences> | undefined {
@@ -779,6 +805,14 @@ function readKnowledgeStatePayload(params: Record<string, unknown>): KnowledgeSt
       ? (() => {
           const runLogRecord = runLogRaw as Record<string, unknown>;
           const model = typeof runLogRecord.model === "string" ? runLogRecord.model.trim() : undefined;
+          const runProfileRaw =
+            typeof (runLogRecord.run_profile ?? runLogRecord.runProfile) === "string"
+              ? String(runLogRecord.run_profile ?? runLogRecord.runProfile).trim().toLowerCase()
+              : undefined;
+          const runProfile =
+            runProfileRaw === "fast" || runProfileRaw === "strict"
+              ? (runProfileRaw as "fast" | "strict")
+              : undefined;
           const durationMsRaw = runLogRecord.duration_ms ?? runLogRecord.durationMs;
           const durationMs =
             typeof durationMsRaw === "number" && Number.isFinite(durationMsRaw) ? durationMsRaw : undefined;
@@ -829,6 +863,7 @@ function readKnowledgeStatePayload(params: Record<string, unknown>): KnowledgeSt
               : undefined;
           if (
             !model &&
+            !runProfile &&
             durationMs === undefined &&
             !error &&
             !degraded &&
@@ -846,6 +881,7 @@ function readKnowledgeStatePayload(params: Record<string, unknown>): KnowledgeSt
           }
           return {
             ...(model ? { model } : {}),
+            ...(runProfile ? { runProfile } : {}),
             ...(durationMs !== undefined ? { durationMs } : {}),
             ...(error ? { error } : {}),
             ...(degraded ? { degraded } : {}),
@@ -920,6 +956,94 @@ function serializeKnowledgePaper(paper: NonNullable<KnowledgeStateInput["corePap
   };
 }
 
+function serializeKnowledgeSummaryPayload(
+  summary: NonNullable<
+    Awaited<ReturnType<typeof getIncrementalStateStatus>>["knowledgeStateSummary"]
+  >,
+): Record<string, unknown> {
+  return {
+    project_id: summary.projectId,
+    stream_key: summary.streamKey,
+    run_profile: summary.runProfile,
+    total_runs: summary.totalRuns,
+    total_hypotheses: summary.totalHypotheses,
+    knowledge_topics_count: summary.knowledgeTopicsCount,
+    paper_notes_count: summary.paperNotesCount,
+    trigger_state: {
+      consecutive_new_revise_days: summary.triggerState.consecutiveNewReviseDays,
+      bridge_count_7d: summary.triggerState.bridgeCount7d,
+      unread_core_backlog: summary.triggerState.unreadCoreBacklog,
+      last_updated_at_ms: summary.triggerState.lastUpdatedAtMs,
+    },
+    recent_full_text_read_count: summary.recentFullTextReadCount,
+    recent_not_full_text_read_count: summary.recentNotFullTextReadCount,
+    quality_gate: {
+      passed: summary.qualityGate.passed,
+      full_text_coverage_pct: summary.qualityGate.fullTextCoveragePct,
+      evidence_binding_rate_pct: summary.qualityGate.evidenceBindingRatePct,
+      citation_error_rate_pct: summary.qualityGate.citationErrorRatePct,
+      reasons: summary.qualityGate.reasons,
+    },
+    hypothesis_gate: {
+      accepted: summary.hypothesisGate.accepted,
+      rejected: summary.hypothesisGate.rejected,
+      rejection_reasons: summary.hypothesisGate.rejectionReasons,
+    },
+    unread_core_paper_ids: summary.unreadCorePaperIds,
+    last_run_at_ms: summary.lastRunAtMs ?? null,
+    last_status: summary.lastStatus ?? null,
+    last_reflection_tasks: summary.lastReflectionTasks.map((task) => ({
+      id: task.id,
+      trigger: task.trigger,
+      reason: task.reason,
+      query: task.query,
+      priority: task.priority,
+      status: task.status,
+    })),
+    recent_papers: summary.recentPapers.map(serializeKnowledgePaper),
+  };
+}
+
+function defaultKnowledgeSummaryPayload(args: {
+  projectId?: string;
+  streamKey?: string;
+}): Record<string, unknown> {
+  return {
+    project_id: args.projectId ?? null,
+    stream_key: args.streamKey ?? null,
+    run_profile: "strict",
+    total_runs: 0,
+    total_hypotheses: 0,
+    knowledge_topics_count: 0,
+    paper_notes_count: 0,
+    trigger_state: {
+      consecutive_new_revise_days: 0,
+      bridge_count_7d: 0,
+      unread_core_backlog: 0,
+      last_updated_at_ms: null,
+    },
+    recent_full_text_read_count: 0,
+    recent_not_full_text_read_count: 0,
+    quality_gate: {
+      passed: false,
+      full_text_coverage_pct: 0,
+      evidence_binding_rate_pct: 0,
+      citation_error_rate_pct: 0,
+      reasons: ["knowledge_state_summary_missing"],
+    },
+    hypothesis_gate: {
+      accepted: 0,
+      rejected: 0,
+      rejection_reasons: [],
+    },
+    unread_core_paper_ids: [],
+    last_run_at_ms: null,
+    last_status: null,
+    last_reflection_tasks: [],
+    recent_papers: [],
+  };
+}
+
 export function createScientifyLiteratureStateTool() {
   return {
     label: "Scientify Literature State",
@@ -970,8 +1094,41 @@ export function createScientifyLiteratureStateTool() {
           const papers = readPapers(params);
           const status = readStringParam(params, "status");
           const runId = readStringParam(params, "run_id");
+          const runProfileRaw = readStringParam(params, "run_profile")?.toLowerCase();
+          const requiredCorePapers = readNumberParam(params, "required_core_papers");
+          const requiredFullTextCoveragePct = readNumberParam(params, "required_full_text_coverage_pct");
+          const runProfile =
+            runProfileRaw === "fast" || runProfileRaw === "strict"
+              ? (runProfileRaw as "fast" | "strict")
+              : undefined;
           const note = readStringParam(params, "note");
           const knowledgeState = readKnowledgeStatePayload(params);
+          const mergedRunLog =
+            runProfile !== undefined ||
+            requiredCorePapers !== undefined ||
+            requiredFullTextCoveragePct !== undefined ||
+            knowledgeState?.runLog
+              ? {
+                  ...(knowledgeState?.runLog ?? {}),
+                  ...(!knowledgeState?.runLog?.runProfile && runProfile !== undefined
+                    ? { runProfile }
+                    : {}),
+                  ...(knowledgeState?.runLog?.requiredCorePapers === undefined && requiredCorePapers !== undefined
+                    ? { requiredCorePapers }
+                    : {}),
+                  ...(knowledgeState?.runLog?.requiredFullTextCoveragePct === undefined &&
+                  requiredFullTextCoveragePct !== undefined
+                    ? { requiredFullTextCoveragePct }
+                    : {}),
+                }
+              : undefined;
+          const mergedKnowledgeState: KnowledgeStateInput | undefined =
+            knowledgeState || mergedRunLog
+              ? {
+                  ...(knowledgeState ?? {}),
+                  ...(mergedRunLog ? { runLog: mergedRunLog } : {}),
+                }
+              : undefined;
           const recorded = await recordIncrementalPush({
             scope,
             topic,
@@ -981,7 +1138,7 @@ export function createScientifyLiteratureStateTool() {
             note,
             papers,
             ...(projectId ? { projectId } : {}),
-            ...(knowledgeState ? { knowledgeState } : {}),
+            ...(mergedKnowledgeState ? { knowledgeState: mergedKnowledgeState } : {}),
           });
           return Result.ok({
             action,
@@ -1007,41 +1164,8 @@ export function createScientifyLiteratureStateTool() {
             pushed_at_ms: recorded.pushedAtMs,
             project_id: recorded.projectId ?? null,
             knowledge_state_summary: recorded.knowledgeStateSummary
-              ? {
-                  project_id: recorded.knowledgeStateSummary.projectId,
-                  stream_key: recorded.knowledgeStateSummary.streamKey,
-                  total_runs: recorded.knowledgeStateSummary.totalRuns,
-                  total_hypotheses: recorded.knowledgeStateSummary.totalHypotheses,
-                  knowledge_topics_count: recorded.knowledgeStateSummary.knowledgeTopicsCount,
-                  paper_notes_count: recorded.knowledgeStateSummary.paperNotesCount,
-                  recent_full_text_read_count: recorded.knowledgeStateSummary.recentFullTextReadCount,
-                  recent_not_full_text_read_count: recorded.knowledgeStateSummary.recentNotFullTextReadCount,
-                  quality_gate: {
-                    passed: recorded.knowledgeStateSummary.qualityGate.passed,
-                    full_text_coverage_pct: recorded.knowledgeStateSummary.qualityGate.fullTextCoveragePct,
-                    evidence_binding_rate_pct: recorded.knowledgeStateSummary.qualityGate.evidenceBindingRatePct,
-                    citation_error_rate_pct: recorded.knowledgeStateSummary.qualityGate.citationErrorRatePct,
-                    reasons: recorded.knowledgeStateSummary.qualityGate.reasons,
-                  },
-                  hypothesis_gate: {
-                    accepted: recorded.knowledgeStateSummary.hypothesisGate.accepted,
-                    rejected: recorded.knowledgeStateSummary.hypothesisGate.rejected,
-                    rejection_reasons: recorded.knowledgeStateSummary.hypothesisGate.rejectionReasons,
-                  },
-                  unread_core_paper_ids: recorded.knowledgeStateSummary.unreadCorePaperIds,
-                  last_run_at_ms: recorded.knowledgeStateSummary.lastRunAtMs ?? null,
-                  last_status: recorded.knowledgeStateSummary.lastStatus ?? null,
-                  last_reflection_tasks: recorded.knowledgeStateSummary.lastReflectionTasks.map((task) => ({
-                    id: task.id,
-                    trigger: task.trigger,
-                    reason: task.reason,
-                    query: task.query,
-                    priority: task.priority,
-                    status: task.status,
-                  })),
-                  recent_papers: recorded.knowledgeStateSummary.recentPapers.map(serializeKnowledgePaper),
-                }
-              : null,
+              ? serializeKnowledgeSummaryPayload(recorded.knowledgeStateSummary)
+              : defaultKnowledgeSummaryPayload({ projectId: recorded.projectId, streamKey: recorded.streamKey }),
           });
         }
 
@@ -1128,41 +1252,8 @@ export function createScientifyLiteratureStateTool() {
               ? null
               : status.knowledgeStateMissingReason ?? "project_or_stream_not_found",
             knowledge_state_summary: status.knowledgeStateSummary
-              ? {
-                  project_id: status.knowledgeStateSummary.projectId,
-                  stream_key: status.knowledgeStateSummary.streamKey,
-                  total_runs: status.knowledgeStateSummary.totalRuns,
-                  total_hypotheses: status.knowledgeStateSummary.totalHypotheses,
-                  knowledge_topics_count: status.knowledgeStateSummary.knowledgeTopicsCount,
-                  paper_notes_count: status.knowledgeStateSummary.paperNotesCount,
-                  recent_full_text_read_count: status.knowledgeStateSummary.recentFullTextReadCount,
-                  recent_not_full_text_read_count: status.knowledgeStateSummary.recentNotFullTextReadCount,
-                  quality_gate: {
-                    passed: status.knowledgeStateSummary.qualityGate.passed,
-                    full_text_coverage_pct: status.knowledgeStateSummary.qualityGate.fullTextCoveragePct,
-                    evidence_binding_rate_pct: status.knowledgeStateSummary.qualityGate.evidenceBindingRatePct,
-                    citation_error_rate_pct: status.knowledgeStateSummary.qualityGate.citationErrorRatePct,
-                    reasons: status.knowledgeStateSummary.qualityGate.reasons,
-                  },
-                  hypothesis_gate: {
-                    accepted: status.knowledgeStateSummary.hypothesisGate.accepted,
-                    rejected: status.knowledgeStateSummary.hypothesisGate.rejected,
-                    rejection_reasons: status.knowledgeStateSummary.hypothesisGate.rejectionReasons,
-                  },
-                  unread_core_paper_ids: status.knowledgeStateSummary.unreadCorePaperIds,
-                  last_run_at_ms: status.knowledgeStateSummary.lastRunAtMs ?? null,
-                  last_status: status.knowledgeStateSummary.lastStatus ?? null,
-                  last_reflection_tasks: status.knowledgeStateSummary.lastReflectionTasks.map((task) => ({
-                    id: task.id,
-                    trigger: task.trigger,
-                    reason: task.reason,
-                    query: task.query,
-                    priority: task.priority,
-                    status: task.status,
-                  })),
-                  recent_papers: status.knowledgeStateSummary.recentPapers.map(serializeKnowledgePaper),
-                }
-              : null,
+              ? serializeKnowledgeSummaryPayload(status.knowledgeStateSummary)
+              : defaultKnowledgeSummaryPayload({ projectId }),
             recent_hypotheses: status.recentHypotheses.map((item) => ({
               id: item.id,
               statement: item.statement,

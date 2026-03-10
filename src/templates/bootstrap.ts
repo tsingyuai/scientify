@@ -14,36 +14,25 @@ export function renderBootstrapMd(projectName: string): string {
 2. 根据用户回答，提取：
    - 核心域关键词（3-5 个）
    - 建议的 arXiv 分类（如 cs.LG, cs.AI）
-   - 建议的监测带相邻领域分类
+   - 建议的跨域探索方向（反射带）
 3. 向用户确认以上配置，接受调整
 4. 确认后执行以下写入操作：
    - 更新 SOUL.md：填写研究方向、核心域、监测带各字段
-   - 生成 metabolism/config.json（参考下方模板）
-5. 询问用户是否立即执行 Day 0（构建初始知识状态 K(T0)）
-   - 如果是，使用 arxiv_search 按配置的关键词检索论文，执行 skills/metabolism/SKILL.md 中的四步循环
+   - 生成 task.json（记录 topic / mode / created）
+5. 询问用户是否立即执行首轮研究（持续研究引擎）
+   - 如果是，执行 prepare -> collect/filter -> reflect -> record -> status
+   - 研究状态写入 knowledge_state/
 6. 删除本文件（BOOTSTRAP.md）
 
-## config.json 模板
+## task.json 模板
 
 \`\`\`json
 {
   "projectId": "${projectName}",
-  "coreQuery": {
-    "keywords": ["关键词1", "关键词2"],
-    "arxivCategories": ["cs.LG"],
-    "dateMode": "daily-new"
-  },
-  "monitorZone": {
-    "categories": ["相邻领域分类"],
-    "enabled": true
-  },
-  "heartbeat": {
-    "cronExpression": "0 6 * * *",
-    "timezone": "Asia/Shanghai",
-    "enabled": true
-  },
-  "agentId": "research-${projectName}",
-  "currentDay": 0,
+  "topic": "由用户确认后的研究主题",
+  "coreKeywords": ["关键词1", "关键词2"],
+  "monitorKeywords": ["跨域探索关键词"],
+  "mode": "continuous-research-engine",
   "createdAt": "${new Date().toISOString()}"
 }
 \`\`\`
@@ -78,14 +67,13 @@ export function renderAgentsMd(): string {
 $W/
 ├── SOUL.md                      # 身份 + 研究方向
 ├── AGENTS.md                    # 本文档
-├── metabolism/                  # 知识新陈代谢
-│   ├── config.json              # 项目配置（关键词、分类、heartbeat）
-│   ├── knowledge/               # K(t) 持久知识状态
-│   │   ├── _index.md            # 全景索引
-│   │   └── topic-*.md           # 主题文件（上限 50）
-│   ├── diffs/                   # 每日 diff 报告
-│   ├── hypotheses/              # 生成的假设
-│   └── log/                     # 运行日志
+├── knowledge_state/             # 持续研究状态真源（唯一）
+│   ├── knowledge/
+│   ├── daily_changes/
+│   ├── hypotheses/
+│   ├── logs/
+│   ├── state.json
+│   └── events.jsonl
 ├── survey/                      # /research-collect outputs
 │   ├── search_terms.json
 │   └── report.md
@@ -105,14 +93,13 @@ $W/
 ├── iterations/                  # /research-review: 审查迭代
 │   └── judge_v*.md
 ├── experiment_res.md            # /research-experiment: 实验报告
-└── skills/                      # workspace skills (metabolism 等)
 \`\`\`
 
 ## Session Context
 
 你可能在不同类型的 session 中被唤醒：
 - **Main session**：与人类直接对话，可触发 research-pipeline 等编排 skill
-- **Cron session**：定时触发，执行周期性任务（如每日 metabolism）
+- **Cron session**：定时触发，执行周期性研究心跳
 - **Spawn session**：被 main session 调度（sessions_spawn），执行一次性重任务
 
 任务指令会在 session 启动时注入，按指令执行即可。
@@ -126,7 +113,7 @@ $W/
 产出文件一旦写入不修改，除非用户明确要求。例外：\`project/\` 在 implement-review 迭代中可变。
 
 ### Knowledge File Rules
-- knowledge/ 下的文件是持久知识状态，修改需谨慎
+- knowledge_state/ 下的文件是持久知识状态，修改需谨慎
 - 每次修改必须先读取当前内容再更新
 - _index.md 是全景索引，必须与 topic 文件保持同步
 - topic 文件数上限 50，低活跃主题应合并归档

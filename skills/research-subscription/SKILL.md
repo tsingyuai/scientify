@@ -26,12 +26,18 @@ Use this skill when the user asks for:
 Do not stop at explanation.
 Create a real cron job via `scientify_cron_job`.
 Do not claim "still running/in progress" unless you created a real async handle (cron job id or task id). If no handle exists, finish the run in the same turn.
+Default policy is fast/non-blocking: always complete retrieve -> filter -> read -> record -> status in this turn when possible.
+User-facing output should be concise Markdown; keep tool-call JSON minimal (only required persistence fields).
 For high-effort strict-quality runs that are unlikely to finish in one turn, start real async execution instead of replying "not executed":
 - if user forbids schedule creation, prefer `sessions_spawn` and return task id
 - otherwise prefer `scientify_cron_job` with `run_now: true` and return job id
+If user asks "create/start a research task now and return raw status JSON", call `scientify_cron_job` (`action=upsert`, `run_now=true`) and return the tool-provided `status_json` directly (do not synthesize JSON text).
 If current turn is already cron-triggered, never call `scientify_cron_job` again from inside that run (avoid nested cron/run_now recursion).
 When using `scientify_literature_state`, keep `scope/topic` consistent across prepare -> record -> status (reuse prepare output; do not replace scope with project id).
 If user gave hard constraints (for example exact/min core paper count), do not return status `ok` unless satisfied; otherwise persist `degraded_quality` with unmet reasons.
+If at least one paper was selected/read, never downgrade the run to `empty` only because strict gates are unmet; persist selected papers with `degraded_quality`.
+In strict profile (only when explicitly requested), do not lower `required_core_papers` below `max_papers` to force-pass quality gates. If selected papers are insufficient, broaden retrieval queries first (aliases/variants/seminal terms), then degrade if still insufficient.
+If strict constraints cannot be fully satisfied in this turn, do not refuse execution; persist a `degraded_quality` run with explicit unmet reasons.
 
 ## Tool to call
 
@@ -90,6 +96,7 @@ For selected core papers, prefer full-text reading first:
   - `research_goal`, `approach`, `methodology_design`
   - `key_contributions`, `practical_insights`, `must_understand_points`, `limitations`
   - `evidence_anchors` (section/locator/claim/quote when possible)
+- Do not fill placeholders like `N/A`, `not provided`, `unknown`; omit field if unavailable, or use `unread_reason` when full text was not read.
 - If full text is unavailable, set `full_text_read=false` with explicit `unread_reason`.
 - After persisting `record`, clean temporary files and report cleanup via `run_log.temp_cleanup_status`.
 - Quality guardrails for research runs:

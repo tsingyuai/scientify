@@ -3,124 +3,136 @@ import * as path from "node:path";
 import * as os from "node:os";
 import type { PluginCommandContext, PluginCommandResult } from "openclaw";
 
-const OPENCLAW_HOME = path.join(os.homedir(), ".openclaw");
+const WORKSPACE_ROOT = path.join(os.homedir(), ".openclaw", "workspace", "projects");
 
-interface MetabolismConfig {
-  projectId: string;
-  currentDay: number;
-  heartbeat?: { enabled?: boolean };
-}
+type StreamState = {
+  lastRunAtMs?: number;
+  lastStatus?: string;
+  lastRunProfile?: "fast" | "strict";
+  totalRuns?: number;
+  totalHypotheses?: number;
+  paperNotes?: string[];
+  triggerState?: {
+    consecutiveNewReviseDays?: number;
+    bridgeCount7d?: number;
+    unreadCoreBacklog?: number;
+  };
+  lastQualityGate?: {
+    passed?: boolean;
+    fullTextCoveragePct?: number;
+    evidenceBindingRatePct?: number;
+    citationErrorRatePct?: number;
+    reasons?: string[];
+  };
+};
 
-/**
- * Find the research project workspace for the current agent context.
- * In a Feishu group bound to a project agent, the workspace is at
- * ~/.openclaw/workspace-research-{id}/
- */
-function findProjectWorkspace(): { workspace: string; projectId: string } | null {
-  // Read openclaw.json to find research agents
-  const configPath = path.join(OPENCLAW_HOME, "openclaw.json");
-  let config: Record<string, unknown>;
+type KnowledgeStateRoot = {
+  streams?: Record<string, StreamState>;
+};
+
+function getActiveProject(): string | null {
+  const activePath = path.join(WORKSPACE_ROOT, ".active");
   try {
-    config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  } catch {
-    return null;
-  }
-
-  const agents = (config.agents as { list?: Array<{ id: string; workspace?: string }> })?.list ?? [];
-  const researchAgents = agents.filter((a) => a.id.startsWith("research-"));
-
-  // Try each research agent workspace to find one with metabolism/config.json
-  for (const agent of researchAgents) {
-    const workspace = (agent.workspace ?? `~/.openclaw/workspace-${agent.id}`).replace("~", os.homedir());
-    const metabolismConfig = path.join(workspace, "metabolism", "config.json");
-    if (fs.existsSync(metabolismConfig)) {
-      return { workspace, projectId: agent.id.replace("research-", "") };
-    }
-  }
-
-  // If only one research agent, use it even without config.json (pre-bootstrap)
-  if (researchAgents.length === 1) {
-    const agent = researchAgents[0];
-    const workspace = (agent.workspace ?? `~/.openclaw/workspace-${agent.id}`).replace("~", os.homedir());
-    return { workspace, projectId: agent.id.replace("research-", "") };
-  }
-
-  return null;
-}
-
-function readMetabolismConfig(workspace: string): MetabolismConfig | null {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(workspace, "metabolism", "config.json"), "utf-8"));
+    return fs.readFileSync(activePath, "utf-8").trim();
   } catch {
     return null;
   }
 }
 
-function countFiles(dirPath: string, filter?: (name: string) => boolean): number {
-  try {
-    const entries = fs.readdirSync(dirPath);
-    return filter ? entries.filter(filter).length : entries.length;
-  } catch {
-    return 0;
-  }
-}
-
-function readRecentDiffs(workspace: string, count: number): string[] {
-  const diffsDir = path.join(workspace, "metabolism", "diffs");
+function listProjects(): string[] {
   try {
     return fs
-      .readdirSync(diffsDir)
-      .filter((f) => f.endsWith(".md"))
-      .sort()
-      .slice(-count);
+      .readdirSync(WORKSPACE_ROOT, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !d.name.startsWith("."))
+      .map((d) => d.name)
+      .sort();
   } catch {
     return [];
   }
 }
 
+function readKnowledgeState(projectId: string): KnowledgeStateRoot | null {
+  const file = path.join(WORKSPACE_ROOT, projectId, "knowledge_state", "state.json");
+  if (!fs.existsSync(file)) return null;
+  try {
+    const raw = fs.readFileSync(file, "utf-8");
+    return JSON.parse(raw) as KnowledgeStateRoot;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * /metabolism-status — Show knowledge metabolism status
+ * /metabolism-status — compatibility alias of continuous research engine status.
  */
-export function handleMetabolismStatus(_ctx: PluginCommandContext): PluginCommandResult {
-  const project = findProjectWorkspace();
-  if (!project) {
-    return { text: "No research project found. Use `openclaw research init <id>` to create one." };
+export function handleMetabolismStatus(ctx: PluginCommandContext): PluginCommandResult {
+  const requested = (ctx.args ?? "").trim();
+  const projectId = requested || getActiveProject() || listProjects()[0];
+  if (!projectId) {
+    return {
+      text: "No project found. Use /research-subscribe with --project, or create a project under ~/.openclaw/workspace/projects/.",
+    };
   }
 
-  const { workspace, projectId } = project;
-  const config = readMetabolismConfig(workspace);
-
-  const topicCount = countFiles(
-    path.join(workspace, "metabolism", "knowledge"),
-    (f) => f.startsWith("topic-"),
-  );
-  const hypothesisCount = countFiles(
-    path.join(workspace, "metabolism", "hypotheses"),
-    (f) => f.endsWith(".md"),
-  );
-  const recentDiffs = readRecentDiffs(workspace, 3);
-
-  let output = `**Metabolism Status — ${projectId}**\n\n`;
-
-  if (!config) {
-    output += "Status: Pending BOOTSTRAP configuration\n";
-    output += "Send a message in this group to start the configuration flow.\n";
-    return { text: output };
+  const data = readKnowledgeState(projectId);
+  if (!data?.streams || Object.keys(data.streams).length === 0) {
+    return {
+      text:
+        `**Continuous Research Engine Status — ${projectId}**\n\n` +
+        "No knowledge_state runs yet. Trigger a research run first.\n\n" +
+        "(Compatibility note: /metabolism-status is an alias view over knowledge_state.)",
+    };
   }
 
-  const heartbeatStatus = config.heartbeat?.enabled !== false ? "active" : "paused";
+  const streams = Object.values(data.streams);
+  let totalRuns = 0;
+  let totalHypotheses = 0;
+  let totalPaperNotes = 0;
+  let latest: StreamState | null = null;
+  let latestTs = 0;
 
-  output += `Day: ${config.currentDay}\n`;
-  output += `Topics: ${topicCount}\n`;
-  output += `Hypotheses: ${hypothesisCount}\n`;
-  output += `Heartbeat: ${heartbeatStatus}\n`;
-
-  if (recentDiffs.length > 0) {
-    output += `\nRecent diffs:\n`;
-    for (const diff of recentDiffs) {
-      output += `  ${diff}\n`;
+  for (const stream of streams) {
+    totalRuns += Number.isFinite(stream.totalRuns) ? Math.max(0, Math.floor(stream.totalRuns!)) : 0;
+    totalHypotheses += Number.isFinite(stream.totalHypotheses) ? Math.max(0, Math.floor(stream.totalHypotheses!)) : 0;
+    totalPaperNotes += Array.isArray(stream.paperNotes) ? stream.paperNotes.length : 0;
+    const ts = Number.isFinite(stream.lastRunAtMs) ? Math.floor(stream.lastRunAtMs!) : 0;
+    if (ts >= latestTs) {
+      latestTs = ts;
+      latest = stream;
     }
   }
 
+  const runProfile = latest?.lastRunProfile ?? "fast";
+  const trigger = latest?.triggerState;
+  const gate = latest?.lastQualityGate;
+
+  let output = `**Continuous Research Engine Status — ${projectId}**\n\n`;
+  output += `- Streams: ${streams.length}\n`;
+  output += `- Total runs: ${totalRuns}\n`;
+  output += `- Total hypotheses: ${totalHypotheses}\n`;
+  output += `- Total paper notes: ${totalPaperNotes}\n`;
+  output += `- Latest run profile: ${runProfile}\n`;
+  output += `- Latest status: ${latest?.lastStatus ?? "(unknown)"}\n`;
+  output += `- Latest run: ${latestTs > 0 ? new Date(latestTs).toISOString() : "(none)"}\n`;
+
+  if (trigger) {
+    output += `\n**Trigger State**\n`;
+    output += `- Consecutive NEW/REVISE days: ${trigger.consecutiveNewReviseDays ?? 0}\n`;
+    output += `- BRIDGE count (7d): ${trigger.bridgeCount7d ?? 0}\n`;
+    output += `- Unread core backlog: ${trigger.unreadCoreBacklog ?? 0}\n`;
+  }
+
+  if (gate) {
+    output += `\n**Quality Gate**\n`;
+    output += `- Passed: ${gate.passed ? "yes" : "no"}\n`;
+    output += `- Full-text coverage: ${gate.fullTextCoveragePct ?? 0}%\n`;
+    output += `- Evidence binding: ${gate.evidenceBindingRatePct ?? 0}%\n`;
+    output += `- Citation error: ${gate.citationErrorRatePct ?? 0}%\n`;
+    if (Array.isArray(gate.reasons) && gate.reasons.length > 0) {
+      output += `- Reasons: ${gate.reasons.join("; ")}\n`;
+    }
+  }
+
+  output += "\n(Compatibility note: /metabolism-status is an alias view over knowledge_state.)";
   return { text: output };
 }

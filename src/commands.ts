@@ -89,6 +89,14 @@ function getKnowledgeStateSummary(projectId: string): {
   totalPaperNotes: number;
   recentFullTextReadCount: number;
   recentNotFullTextReadCount: number;
+  lastQualityGatePassed?: boolean;
+  lastQualityGateReasons?: string[];
+  lastChangeStat?: {
+    newCount: number;
+    confirmCount: number;
+    reviseCount: number;
+    bridgeCount: number;
+  };
   lastRunAtMs?: number;
   lastStatus?: string;
   streamCount: number;
@@ -106,6 +114,16 @@ function getKnowledgeStateSummary(projectId: string): {
           paperNotes?: string[];
           recentFullTextReadCount?: number;
           recentNotFullTextReadCount?: number;
+          lastQualityGate?: {
+            passed?: boolean;
+            reasons?: string[];
+          };
+          recentChangeStats?: Array<{
+            newCount?: number;
+            confirmCount?: number;
+            reviseCount?: number;
+            bridgeCount?: number;
+          }>;
           lastRunAtMs?: number;
           lastStatus?: string;
         }
@@ -120,6 +138,16 @@ function getKnowledgeStateSummary(projectId: string): {
     let recentNotFullTextReadCount = 0;
     let lastRunAtMs = 0;
     let lastStatus: string | undefined;
+    let lastQualityGatePassed: boolean | undefined;
+    let lastQualityGateReasons: string[] | undefined;
+    let lastChangeStat:
+      | {
+          newCount: number;
+          confirmCount: number;
+          reviseCount: number;
+          bridgeCount: number;
+        }
+      | undefined;
     for (const stream of streamEntries) {
       totalRuns += Number.isFinite(stream.totalRuns) ? Math.max(0, Math.floor(stream.totalRuns!)) : 0;
       totalHypotheses += Number.isFinite(stream.totalHypotheses)
@@ -136,6 +164,44 @@ function getKnowledgeStateSummary(projectId: string): {
       if (runAt >= lastRunAtMs) {
         lastRunAtMs = runAt;
         lastStatus = stream.lastStatus;
+        if (stream.lastQualityGate && typeof stream.lastQualityGate === "object") {
+          lastQualityGatePassed = stream.lastQualityGate.passed === true;
+          if (Array.isArray(stream.lastQualityGate.reasons)) {
+            lastQualityGateReasons = stream.lastQualityGate.reasons
+              .filter((item): item is string => typeof item === "string")
+              .map((item) => item.trim())
+              .filter((item) => item.length > 0)
+              .slice(0, 5);
+          } else {
+            lastQualityGateReasons = undefined;
+          }
+        } else {
+          lastQualityGatePassed = undefined;
+          lastQualityGateReasons = undefined;
+        }
+        const firstChange = Array.isArray(stream.recentChangeStats) ? stream.recentChangeStats[0] : undefined;
+        if (firstChange && typeof firstChange === "object") {
+          lastChangeStat = {
+            newCount:
+              typeof firstChange.newCount === "number" && Number.isFinite(firstChange.newCount)
+                ? Math.max(0, Math.floor(firstChange.newCount))
+                : 0,
+            confirmCount:
+              typeof firstChange.confirmCount === "number" && Number.isFinite(firstChange.confirmCount)
+                ? Math.max(0, Math.floor(firstChange.confirmCount))
+                : 0,
+            reviseCount:
+              typeof firstChange.reviseCount === "number" && Number.isFinite(firstChange.reviseCount)
+                ? Math.max(0, Math.floor(firstChange.reviseCount))
+                : 0,
+            bridgeCount:
+              typeof firstChange.bridgeCount === "number" && Number.isFinite(firstChange.bridgeCount)
+                ? Math.max(0, Math.floor(firstChange.bridgeCount))
+                : 0,
+          };
+        } else {
+          lastChangeStat = undefined;
+        }
       }
     }
     return {
@@ -144,6 +210,9 @@ function getKnowledgeStateSummary(projectId: string): {
       totalPaperNotes,
       recentFullTextReadCount,
       recentNotFullTextReadCount,
+      ...(typeof lastQualityGatePassed === "boolean" ? { lastQualityGatePassed } : {}),
+      ...(lastQualityGateReasons && lastQualityGateReasons.length > 0 ? { lastQualityGateReasons } : {}),
+      ...(lastChangeStat ? { lastChangeStat } : {}),
       ...(lastRunAtMs > 0 ? { lastRunAtMs } : {}),
       ...(lastStatus ? { lastStatus } : {}),
       streamCount: streamEntries.length,
@@ -175,6 +244,18 @@ export function handleResearchStatus(_ctx: PluginCommandContext): PluginCommandR
       output += `- recent full-text-read papers: ${knowledgeSummary.recentFullTextReadCount}\n`;
       output += `- recent not-full-text-read papers: ${knowledgeSummary.recentNotFullTextReadCount}\n`;
       output += `- last status: ${knowledgeSummary.lastStatus ?? "(unknown)"}\n`;
+      if (typeof knowledgeSummary.lastQualityGatePassed === "boolean") {
+        output += `- quality gate: ${knowledgeSummary.lastQualityGatePassed ? "passed" : "failed"}\n`;
+      }
+      if (knowledgeSummary.lastQualityGateReasons && knowledgeSummary.lastQualityGateReasons.length > 0) {
+        output += `- quality reasons: ${knowledgeSummary.lastQualityGateReasons.join("; ")}\n`;
+      }
+      if (knowledgeSummary.lastChangeStat) {
+        output +=
+          `- last change stats (NEW/CONFIRM/REVISE/BRIDGE): ` +
+          `${knowledgeSummary.lastChangeStat.newCount}/${knowledgeSummary.lastChangeStat.confirmCount}/` +
+          `${knowledgeSummary.lastChangeStat.reviseCount}/${knowledgeSummary.lastChangeStat.bridgeCount}\n`;
+      }
       output += `- last run: ${
         knowledgeSummary.lastRunAtMs ? new Date(knowledgeSummary.lastRunAtMs).toISOString() : "(none)"
       }\n\n`;

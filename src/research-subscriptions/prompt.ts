@@ -9,6 +9,10 @@ import type { ScheduleSpec, SubscriptionOptions } from "./types.js";
 
 const RESEARCH_WORKFLOW_VERB_RE =
   /\b(search|survey|analy[sz]e|filter|track|monitor|update|summari[sz]e|report|plan)\b|检索|调研|筛选|跟踪|追踪|更新|总结|汇报|规划/u;
+const FULLTEXT_OPT_OUT_RE =
+  /\b(metadata[-\s]?only|abstract[-\s]?only|no\s+full[-\s]?text|without\s+full[-\s]?text|quick\s+scan)\b|不需要全文|不用全文|只看摘要|仅摘要|只要元数据|不读全文/u;
+const TOPIC_NOISE_TOKEN_RE = /\b(?:smoke|test|testing|debug|dry[-\s]?run|trial|sandbox|e2e|staging)[-_ ]?\d{0,12}\b/giu;
+const DATE_NOISE_RE = /\b20\d{2}(?:[-_.]?\d{2})?(?:[-_.]?\d{2})?\b/g;
 
 function normalizeReminderText(raw: string): string {
   let text = raw.trim();
@@ -49,6 +53,41 @@ function deriveResearchTopicFromMessage(message: string): string {
   return normalized.length > 0 ? normalized : message.trim();
 }
 
+function normalizeRetrievalTopic(topic: string): string {
+  const stripped = topic.replace(TOPIC_NOISE_TOKEN_RE, " ").replace(DATE_NOISE_RE, " ").replace(/\s+/g, " ").trim();
+  return stripped.length > 0 ? stripped : topic.trim();
+}
+
+function buildVariantKeywords(topic: string): string[] {
+  const keywords = new Set<string>();
+  const normalized = normalizeRetrievalTopic(topic);
+  const tokens =
+    normalized
+      .toLowerCase()
+      .match(/[\p{L}\p{N}][\p{L}\p{N}_-]{1,47}/gu)
+      ?.map((item) => item.trim())
+      .filter((item) => item.length >= 3) ?? [];
+  if (normalized.length > 0) keywords.add(normalized);
+  if (tokens.length >= 2) {
+    keywords.add(tokens.slice(0, 4).join(" "));
+    keywords.add(tokens.slice(0, 3).join("-"));
+  }
+  for (const token of tokens.slice(0, 8)) {
+    keywords.add(token);
+  }
+  return [...keywords].slice(0, 10);
+}
+
+function resolveRunProfile(
+  options: Pick<SubscriptionOptions, "metadataOnly" | "topic" | "message">,
+  effectiveTopic: string,
+): "fast" | "strict" {
+  if (options.metadataOnly === true) return "fast";
+  const text = `${options.topic ?? ""} ${options.message ?? ""} ${effectiveTopic}`.trim();
+  if (text.length > 0 && FULLTEXT_OPT_OUT_RE.test(text)) return "fast";
+  return "strict";
+}
+
 function buildPreferencePayload(options: Pick<SubscriptionOptions, "maxPapers" | "recencyDays" | "sources">): {
   max_papers: number;
   recency_days?: number;
@@ -66,7 +105,15 @@ function buildPreferencePayload(options: Pick<SubscriptionOptions, "maxPapers" |
 export function buildScheduledTaskMessage(
   options: Pick<
     SubscriptionOptions,
-    "topic" | "message" | "projectId" | "maxPapers" | "recencyDays" | "sources" | "candidatePool" | "scoreWeights"
+    | "topic"
+    | "message"
+    | "projectId"
+    | "maxPapers"
+    | "recencyDays"
+    | "sources"
+    | "candidatePool"
+    | "scoreWeights"
+    | "metadataOnly"
   >,
   scheduleKind: ScheduleSpec["kind"],
   scopeKey: string,
@@ -96,10 +143,17 @@ export function buildScheduledTaskMessage(
 
   const trimmedTopic = (options.topic ?? promotedTopic)?.trim();
   const effectiveTopic = trimmedTopic || "active project research updates";
+  const retrievalTopic = normalizeRetrievalTopic(effectiveTopic);
+  const variantKeywords = buildVariantKeywords(retrievalTopic);
 
   const preferences = buildPreferencePayload(options);
+  const runProfile = resolveRunProfile(options, effectiveTopic);
   const projectId = options.projectId?.trim();
-  const candidatePool = resolveCandidatePool(options.candidatePool, preferences.max_papers);
+  const candidatePoolBase = resolveCandidatePool(options.candidatePool, preferences.max_papers);
+  const candidatePool =
+    runProfile === "strict"
+      ? Math.max(candidatePoolBase, Math.min(40, Math.max(20, preferences.max_papers * 4)))
+      : candidatePoolBase;
   const scoreWeights = options.scoreWeights ?? DEFAULT_SCORE_WEIGHTS;
   const scoreWeightsText = formatScoreWeights(scoreWeights);
   const preparePayload = JSON.stringify({
@@ -109,266 +163,148 @@ export function buildScheduledTaskMessage(
     ...(projectId ? { project_id: projectId } : {}),
     preferences,
   });
-  const recordPaperTemplate = [
-    {
-      id: "arxiv:2501.12345",
-      title: "Paper title",
-      url: "https://arxiv.org/abs/2501.12345",
-      score: 92,
-      reason: "High topical relevance and strong authority.",
-    },
-    {
-      id: "doi:10.1000/xyz123",
-      title: "Paper title 2",
-      url: "https://doi.org/10.1000/xyz123",
-      score: 88,
-      reason: "Novel method with clear practical impact.",
-    },
-  ];
-  const knowledgeStateTemplate = {
-    core_papers: [
-      {
-        id: "arxiv:2501.12345",
-        title: "Paper title",
-        url: "https://arxiv.org/abs/2501.12345",
-        source: "arxiv",
-        score: 92,
-        reason: "High topical relevance and strong authority.",
-        summary: "One-line core takeaway.",
-        evidence_ids: ["arxiv:2501.12345"],
-        full_text_read: true,
-        read_status: "fulltext",
-        full_text_source: "arxiv_pdf",
-        full_text_ref: "https://arxiv.org/pdf/2501.12345.pdf",
-        domain: "machine learning",
-        subdomains: ["parameter-efficient fine-tuning", "large language models"],
-        cross_domain_links: ["systems optimization"],
-        research_goal: "Improve adaptation quality while keeping trainable parameters very small.",
-        approach: "Introduce low-rank adapters and train only adapter matrices.",
-        methodology_design: "Compare with full fine-tuning across multiple model scales/tasks.",
-        key_contributions: ["Low-rank adaptation module design", "Parameter/memory efficiency evidence"],
-        practical_insights: ["Rank choice strongly affects stability and quality tradeoff"],
-        must_understand_points: ["Why low-rank decomposition works in adaptation layers"],
-        limitations: ["Task-specific rank sensitivity"],
-        key_evidence_spans: ["Eq.(3) shows ...", "Section 4 reports ..."],
-        evidence_anchors: [
-          {
-            section: "Method",
-            locator: "Eq.(3)",
-            claim: "Low-rank decomposition reduces trainable parameters drastically.",
-            quote: "W = W0 + BA where rank(B,A) << d",
-          },
-        ],
-      },
-    ],
-    exploration_papers: [
-      {
-        id: "doi:10.1000/xyz123",
-        title: "Paper title 2",
-        url: "https://doi.org/10.1000/xyz123",
-        source: "openalex",
-        score: 88,
-        reason: "Novel method with clear practical impact.",
-        full_text_read: false,
-        read_status: "metadata",
-        unread_reason: "Full text not accessible in this run.",
-      },
-    ],
-    exploration_trace: [
-      {
-        query: "P2D battery model physics-informed agent",
-        source: "arxiv",
-        candidates: 20,
-        filtered_to: 3,
-        filtered_out_reasons: ["off-topic", "weak authority"],
-        result_count: 3,
-      },
-    ],
-    knowledge_changes: [
-      {
-        type: "NEW",
-        statement: "New method/insight discovered in this run.",
-        evidence_ids: ["arxiv:2501.12345"],
-        topic: "example-topic",
-      },
-    ],
-    knowledge_updates: [
-      {
-        topic: "example-topic",
-        op: "append",
-        content: "Update knowledge base with this run's key finding.",
-        confidence: "medium",
-        evidence_ids: ["arxiv:2501.12345"],
-      },
-    ],
-    hypotheses: [
-      {
-        statement: "Potential hypothesis triggered by current changes.",
-        trigger: "TREND",
-        dependency_path: ["Prior unresolved question", "New supporting evidence"],
-        novelty: 3.5,
-        feasibility: 3.2,
-        impact: 4.1,
-        evidence_ids: ["arxiv:2501.12345"],
-        validation_status: "unchecked",
-        validation_notes: "Optional: run openreview_lookup or additional search before promotion.",
-        validation_evidence: [],
-      },
-    ],
-    run_log: {
-      model: "model-name",
-      duration_ms: 1200,
-      required_core_papers: preferences.max_papers,
-      required_full_text_coverage_pct: 80,
-      temp_full_text_dir: "/tmp/scientify-fulltext/run-123",
-      temp_files_downloaded: 3,
-      temp_cleanup_status: "done",
-      full_text_attempted: 3,
-      full_text_completed: 2,
-      notes: "short run note",
-    },
-  };
+  const strictRunLogTemplate =
+    runProfile === "strict"
+      ? {
+          required_core_papers: Math.max(1, Math.min(preferences.max_papers, 3)),
+          required_full_text_coverage_pct: 80,
+        }
+      : {};
   const recordTemplate = JSON.stringify({
     action: "record",
     scope: scopeKey,
     topic: effectiveTopic,
     ...(projectId ? { project_id: projectId } : {}),
-    run_id: "run-20260309T103000Z",
+    run_profile: runProfile,
+    run_id: "run-<unique-id>",
     status: "ok",
-    papers: recordPaperTemplate,
-    knowledge_state: knowledgeStateTemplate,
+    papers: [{ id: "arxiv:2501.12345", title: "Paper title", url: "https://arxiv.org/abs/2501.12345" }],
+    knowledge_state: {
+      core_papers: [
+        {
+          id: "arxiv:2501.12345",
+          title: "Paper title",
+          url: "https://arxiv.org/abs/2501.12345",
+          full_text_read: true,
+          domain: "machine learning",
+          subdomains: ["parameter-efficient fine-tuning"],
+          research_goal: "one-sentence goal",
+          approach: "one-sentence approach",
+          methodology_design: "one-sentence method setup",
+          key_contributions: ["contribution 1", "contribution 2"],
+          practical_insights: ["insight 1"],
+          must_understand_points: ["must-understand 1"],
+          limitations: ["limitation 1"],
+          evidence_anchors: [
+            {
+              section: "Method",
+              locator: "Eq.(3)",
+              claim: "key claim",
+              quote: "short quote from paper",
+            },
+          ],
+        },
+      ],
+      knowledge_changes: [{ type: "NEW", statement: "one concrete change", evidence_ids: ["arxiv:2501.12345"] }],
+      run_log: { run_profile: runProfile, notes: "short run note", ...strictRunLogTemplate },
+    },
   });
-  const recordFallbackTemplate = JSON.stringify({
+  const recordDegradedTemplate = JSON.stringify({
     action: "record",
     scope: scopeKey,
     topic: effectiveTopic,
     ...(projectId ? { project_id: projectId } : {}),
-    run_id: "run-20260309T103000Z-fallback",
-    status: "fallback_representative",
-    papers: recordPaperTemplate,
+    run_profile: runProfile,
+    run_id: "run-<unique-id>-degraded",
+    status: "degraded_quality",
+    papers: [{ id: "arxiv:2501.12345", title: "Paper title", url: "https://arxiv.org/abs/2501.12345" }],
     knowledge_state: {
-      ...knowledgeStateTemplate,
-      run_log: {
-        model: "model-name",
-        duration_ms: 1300,
-        degraded: true,
-        required_core_papers: preferences.max_papers,
-        required_full_text_coverage_pct: 80,
-        temp_full_text_dir: "/tmp/scientify-fulltext/run-123",
-        temp_files_downloaded: 1,
-        temp_cleanup_status: "done",
-        full_text_attempted: 1,
-        full_text_completed: 0,
-        notes: "Fallback pass was used because incremental pass had no unseen papers.",
-      },
+      run_log: { run_profile: runProfile, degraded: true, notes: "quality not fully met in this run", ...strictRunLogTemplate },
     },
-    note: "No unseen papers this cycle; delivered best representative papers instead.",
+    note: "selected papers persisted with degraded quality",
   });
   const recordEmptyTemplate = JSON.stringify({
     action: "record",
     scope: scopeKey,
     topic: effectiveTopic,
     ...(projectId ? { project_id: projectId } : {}),
+    run_profile: runProfile,
     run_id: "run-20260309T103000Z-empty",
     status: "empty",
     papers: [],
     knowledge_state: {
-      core_papers: [],
-      exploration_papers: [],
-      exploration_trace: [],
-      knowledge_changes: [],
-      knowledge_updates: [],
-      hypotheses: [],
-    run_log: {
-        model: "model-name",
-        required_core_papers: preferences.max_papers,
-        required_full_text_coverage_pct: 80,
-        temp_cleanup_status: "not_needed",
-        notes: "No suitable paper found in this cycle.",
-      },
+      run_log: { run_profile: runProfile, notes: "No suitable paper found in this cycle.", ...strictRunLogTemplate },
     },
     note: "No suitable paper found in incremental pass and fallback representative pass.",
   });
+  const variantHintLine =
+    variantKeywords.length > 0 ? `- Expansion keywords: ${variantKeywords.join(", ")}` : "- Expansion keywords: (none)";
 
   if (scheduleKind === "at") {
     return [
       `/research-pipeline Run a focused literature study on \"${effectiveTopic}\" and return up to ${preferences.max_papers} high-value representative papers.`,
       "",
-      "Mandatory workflow:",
-      "0) Truthfulness contract: do not claim background progress unless a real async handle exists. If you did not create a cron job/task id, this run must finish in this turn.",
-      "0.1) This run already has an async handle (cron). Do not call `scientify_cron_job` again from inside this run, and do not create nested `run_now` jobs.",
-      `1) Call tool \`scientify_literature_state\` with: ${preparePayload}`,
-      "1.1) `no_deliver` only controls delivery. You still must call `scientify_literature_state.record` for persistence.",
-      "1.2) Reuse the exact `scope` and `topic` returned by `prepare` in `record` and `status`. Do not replace scope with project id.",
-      "2) Read `memory_hints` from prepare result. Treat preferred keywords/sources as positive ranking priors, and avoided ones as negative priors.",
-      `3) Build a candidate pool of around ${candidatePool} papers when possible, matching returned preferences (sources/recency).`,
-      `4) Score each candidate with weighted dimensions (${scoreWeightsText}). Each dimension is 0-100, then compute weighted average score.`,
-      `5) Apply memory prior adjustment to the score (up-rank preferred keyword/source matches; down-rank avoided matches).`,
-      `6) Select top ${preferences.max_papers} papers.`,
-      "7) Create a temporary local directory for full text (for example `/tmp/scientify-fulltext/<run-id>`). Download full text for selected core papers when possible (arXiv PDF/source first, then DOI OA PDF if available).",
-      "8) Read full text with `paper_browser` in sections (method, experiments, limitations). Extract structured fields per paper: `domain`, `subdomains`, `cross_domain_links`, `research_goal`, `approach`, `methodology_design`, `key_contributions`, `practical_insights`, `must_understand_points`, `limitations`, and `evidence_anchors`.",
-      "9) For papers without full text, explicitly set `full_text_read=false` and provide `unread_reason`.",
-      "9.1) Set a unique `run_id` for this cycle (cron run id preferred; otherwise generate a timestamp-based id). Reusing the same run_id can cause idempotent no-op writes.",
-      `10) Call \`scientify_literature_state\` to persist selected papers and knowledge_state details using this JSON shape: ${recordTemplate}`,
-      "11) `knowledge_state.core_papers` must include all selected papers with id/title/url/score/reason and structured reading fields (not placeholders).",
-      "12) `knowledge_state.knowledge_changes` and `knowledge_state.knowledge_updates` must reflect this run's actual findings and include `evidence_ids` whenever available.",
-      "13) Quality targets must be met: core full-text coverage >= 80%, evidence-binding rate >= 90% (key conclusions backed by section+locator+quote), citation error rate < 2%.",
-      "14) Without sufficient full-text evidence, do not keep high-confidence conclusions; downgrade confidence explicitly.",
-      "15) If `knowledge_changes` contains BRIDGE (or REVISE+CONFIRM contradiction signals), run at least one reflection query immediately and write it into `knowledge_state.exploration_trace` with query/reason/source/candidates/filtered_to.",
-      "15.1) Do not emit BRIDGE without grounded evidence_ids linked to this run's papers; at least one bridge evidence should be full-text-backed.",
-      "16) For hypotheses, use research-grade gate: at least 2 `evidence_ids`, dependency_path length >= 2, and include novelty+feasibility+impact scores. Evidence should be resolved and preferably full-text-backed.",
-      "16.1) If user provided hard constraints (for example exact/min core paper count), set `run_log.required_core_papers` accordingly and do not return status `ok` unless the requirement is met.",
-      "17) If a hypothesis is high-impact, optionally run `openreview_lookup` or additional literature search and fill `validation_status`/`validation_notes`/`validation_evidence`.",
-      "18) After recording state, clean temporary full-text files. Put cleanup outcome in `run_log.temp_cleanup_status` (`done|partial|failed|not_needed`) and optional `temp_cleanup_note`.",
-      "19) Keep `run_log.notes` factual (candidate count, filtering reason, reflection action, fallback/no-fallback).",
-      "20) In user-facing output, always include a numbered paper list with title + direct source URL + one-line value. Never claim papers were selected without listing links.",
-      "21) Do not display raw score/reason unless explicitly requested.",
-      "22) If nothing suitable is found, still call record with empty papers using:",
+      "Workflow (simple, Markdown-first):",
+      "1) Complete 5 steps in this turn: retrieve -> filter -> read -> save metadata -> update knowledge/hypothesis.",
+      "2) First call prepare:",
+      `${preparePayload}`,
+      `3) Build candidate pool around ${candidatePool}; select up to ${preferences.max_papers} credible papers.`,
+      `   - Retrieval topic (normalized): ${retrievalTopic}`,
+      `   ${variantHintLine}`,
+      "   - Filter policy: semantic relevance, not exact string match; include important variants and aliases.",
+      "   - If core candidates < 3, relax filters and rerun with broader query terms before declaring empty.",
+      `4) Reading policy: ${runProfile === "strict" ? "full-text required by default (strict)." : "metadata-only allowed (explicit opt-out detected)."}`,
+      "   - Never drop a relevant paper only because full text failed; keep it with full_text_read=false and unread_reason.",
+      "5) User-facing answer MUST be concise Markdown:",
+      "   - Selected papers (numbered, title + URL + one-line value)",
+      "   - Read status (fulltext vs metadata)",
+      "   - For each selected paper: domain/subdomains + goal + approach + methodology + contributions + insights + limitations",
+      "   - Knowledge updates (NEW/CONFIRM/REVISE/BRIDGE)",
+      "   - Hypothesis decision (generated or not + reason)",
+      "   - If trigger signals are present (e.g. NEW>=2, or NEW+REVISE>=2, or BRIDGE present), propose 1 grounded hypothesis with >=2 evidence_ids and dependency_path>=2",
+      "6) Persist once via `scientify_literature_state.record` using MINIMAL JSON only:",
+      `${recordTemplate}`,
+      "7) If papers exist but quality is partial, persist `degraded_quality` (do not skip record):",
+      `${recordDegradedTemplate}`,
+      "8) Use `empty` only when no paper is selected after both primary and broadened fallback retrieval:",
       `${recordEmptyTemplate}`,
-      "Then respond: `No new literature found.`",
-      "23) After `record`, call `scientify_literature_state.status` once and include `run_id`/`latest_run_id` in your response for verifiable traceability.",
+      "9) After record, call status and include `run_id`/`latest_run_id`.",
+      "Never write placeholders like 'not provided'/'N/A' in core_papers fields. If unavailable, omit the field or set unread_reason.",
+      "Do not output large JSON to users; JSON is for tool call only.",
     ].join("\n");
   }
 
   return [
     `/research-pipeline Run an incremental literature check focused on \"${effectiveTopic}\".`,
     "",
-    "Mandatory workflow:",
-    "0) Truthfulness contract: do not claim background progress unless a real async handle exists. If you did not create a cron job/task id, this run must finish in this turn.",
-    "0.1) This run already has an async handle (cron). Do not call `scientify_cron_job` again from inside this run, and do not create nested `run_now` jobs.",
-    `1) Call tool \`scientify_literature_state\` with: ${preparePayload}`,
-    "1.1) `no_deliver` only controls delivery. You still must call `scientify_literature_state.record` for persistence.",
-    "1.2) Reuse the exact `scope` and `topic` returned by `prepare` in `record` and `status`. Do not replace scope with project id.",
-    "2) Read `memory_hints` from prepare result. Use them as quiet personalization priors in ranking (not user-facing).",
-    "3) Treat `exclude_paper_ids` as hard dedupe constraints. Do not push papers whose IDs are already in that list.",
-    `4) Incremental pass: build a candidate pool of around ${candidatePool} unseen papers when possible, following preferences (sources/recency).`,
-    `5) Score each candidate with weighted dimensions (${scoreWeightsText}). Each dimension is 0-100, then compute weighted average score.`,
-    "6) Apply memory prior adjustment to the score (up-rank preferred keyword/source matches; down-rank avoided matches).",
-    `7) Select at most ${preferences.max_papers} top-ranked unseen papers.`,
-    "8) Create a temporary local directory for full text (for example `/tmp/scientify-fulltext/<run-id>`). Download full text for selected core papers when possible (arXiv first, then DOI OA if available).",
-    "9) Read full text with `paper_browser` and fill structured paper fields: `domain`, `subdomains`, `cross_domain_links`, `research_goal`, `approach`, `methodology_design`, `key_contributions`, `practical_insights`, `must_understand_points`, `limitations`, and `evidence_anchors`.",
-    "10) If full text cannot be read, set `full_text_read=false` with explicit `unread_reason`.",
-    "10.1) Set a unique `run_id` for this cycle (cron run id preferred; otherwise generate a timestamp-based id). Reusing the same run_id can cause idempotent no-op writes.",
-    `11) If selected > 0, call \`scientify_literature_state\` with status \`ok\` using: ${recordTemplate}`,
-    "12) `knowledge_state.core_papers` must contain all selected papers with id/title/url/score/reason and structured reading fields; `exploration_trace` should include query/source/candidates/filtered_to/filter reasons when available.",
-    "13) `knowledge_state.knowledge_changes` and `knowledge_state.hypotheses` should include evidence_ids (and dependency_path for hypotheses) whenever available, preferably from full-text-read papers.",
-    "14) Quality targets must be met: core full-text coverage >= 80%, evidence-binding rate >= 90% (key conclusions backed by section+locator+quote), citation error rate < 2%.",
-    "15) Without sufficient full-text evidence, do not keep high-confidence conclusions; downgrade confidence explicitly.",
-    "16) If `knowledge_changes` contains BRIDGE (or REVISE+CONFIRM contradiction signals), run at least one reflection query immediately and write it into `knowledge_state.exploration_trace` with query/reason/source/candidates/filtered_to.",
-    "16.1) Do not emit BRIDGE without grounded evidence_ids linked to this run's papers; at least one bridge evidence should be full-text-backed.",
-    "17) Research-grade hypothesis gate: each hypothesis should have >=2 evidence_ids, dependency_path length >=2, novelty+feasibility+impact scores, and evidence linked to this run's papers (full-text-backed when possible).",
-    "17.1) If user provided hard constraints (for example exact/min core paper count), set `run_log.required_core_papers` accordingly and do not return status `ok` unless the requirement is met.",
-    "18) For top hypotheses, optionally validate risk via `openreview_lookup` and fill `validation_status`/`validation_notes`/`validation_evidence`.",
-    "19) If incremental selection is empty, run one fallback representative pass (ignore `exclude_paper_ids` once) and select best representative papers.",
-    `20) If fallback returns papers, call \`scientify_literature_state\` with status \`fallback_representative\` using: ${recordFallbackTemplate}`,
-    "21) After recording state, clean temporary full-text files and set `run_log.temp_cleanup_status` accordingly (`done|partial|failed|not_needed`).",
-    "22) If papers are selected (incremental or fallback), output a numbered list with title + direct source URL + one-line value for each pushed paper.",
-    "23) Output a compact progress report for this cycle: what changed, what matters, and a concrete plan for the next 1 hour.",
-    "24) Keep user-facing output concise; do not expose raw score/reason unless explicitly requested.",
-    "25) If both incremental and fallback passes are empty, call record with empty papers using:",
+    "Workflow (simple, Markdown-first):",
+    "1) Complete 5 steps in this turn: retrieve -> filter -> read -> save metadata -> update knowledge/hypothesis.",
+    "2) First call prepare:",
+    `${preparePayload}`,
+    `3) Build candidate pool around ${candidatePool}; select up to ${preferences.max_papers} credible unseen papers.`,
+    `4) Rank with weights (${scoreWeightsText}), while respecting memory hints and dedupe.`,
+    `   - Retrieval topic (normalized): ${retrievalTopic}`,
+    `   ${variantHintLine}`,
+    "   - Filter policy: semantic relevance, not exact string match; include major method variants.",
+    "   - If selected core papers < 3, broaden query and rerun once before returning empty.",
+    `5) Reading policy: ${runProfile === "strict" ? "full-text required by default (strict)." : "metadata-only allowed (explicit opt-out detected)."}`,
+    "   - Never drop a relevant paper only because full text failed; keep it with full_text_read=false and unread_reason.",
+    "6) User-facing answer MUST be concise Markdown:",
+    "   - Selected papers (numbered, title + URL + one-line value)",
+    "   - Read status (fulltext vs metadata)",
+    "   - For each selected paper: domain/subdomains + goal + approach + methodology + contributions + insights + limitations",
+    "   - Knowledge updates (NEW/CONFIRM/REVISE/BRIDGE)",
+    "   - Hypothesis decision (generated or not + reason)",
+    "   - If trigger signals are present (e.g. NEW>=2, or NEW+REVISE>=2, or BRIDGE present), propose 1 grounded hypothesis with >=2 evidence_ids and dependency_path>=2",
+    "7) Persist once via `scientify_literature_state.record` using MINIMAL JSON only:",
+    `${recordTemplate}`,
+    "8) If papers exist but quality is partial, persist `degraded_quality` (do not skip record):",
+    `${recordDegradedTemplate}`,
+    "9) If both incremental and broadened fallback passes are empty, persist empty:",
     `${recordEmptyTemplate}`,
-    "26) Then still return a useful progress status with next-hour actions (instead of only a generic reminder).",
-    "27) After `record`, call `scientify_literature_state.status` and include `run_id`/`latest_run_id` in your response for verifiable traceability.",
+    "10) After record, call status and include `run_id`/`latest_run_id` for traceability.",
+    "Never write placeholders like 'not provided'/'N/A' in core_papers fields. If unavailable, omit the field or set unread_reason.",
+    "Do not output large JSON to users; JSON is for tool call only.",
   ].join("\n");
 }
 
@@ -391,6 +327,7 @@ export function formatUsage(): string {
     "- `/research-subscribe daily 08:00 --topic \"LLM alignment\"`",
     "- `/research-subscribe daily 08:00 --topic \"LLM alignment\" --max-papers 5 --sources arxiv,openalex`",
     "- `/research-subscribe daily 08:00 --topic \"LLM alignment\" --candidate-pool 12 --score-weights relevance:45,novelty:20,authority:25,actionability:10`",
+    "- `/research-subscribe daily 08:00 --topic \"LLM alignment\" --metadata-only`",
     "- `/research-subscribe at 1m --message \"Time to drink coffee.\"`",
     "- `/research-subscribe daily 09:00 --no-deliver`",
   ].join("\n");

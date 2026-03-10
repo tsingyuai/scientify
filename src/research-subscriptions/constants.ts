@@ -68,4 +68,4 @@ export const DEFAULT_SCORE_WEIGHTS: ScoreWeights = {
 export const SCORE_WEIGHT_KEYS = ["relevance", "novelty", "authority", "actionability"] as const;
 export const MIN_CANDIDATE_POOL = 3;
 export const MAX_CANDIDATE_POOL = 50;
-export const DEFAULT_CANDIDATE_POOL = 10;
+export const DEFAULT_CANDIDATE_POOL = 20;

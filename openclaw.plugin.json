@@ -1,7 +1,7 @@
 {
   "id": "scientify",
   "name": "Scientify",
-  "description": "AI-powered research workflow automation for OpenClaw",
+  "description": "AI-powered continuous research engine for OpenClaw",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -29,8 +29,6 @@
     "skills/research-experiment",
     "skills/research-collect",
     "skills/write-review-paper",
-    "skills/research-subscription",
-    "skills/metabolism",
-    "skills/metabolism-init"
+    "skills/research-subscription"
   ]
 }
