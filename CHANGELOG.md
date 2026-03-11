@@ -1,3 +1,9 @@
+## [1.13.6](https://github.com/tsingyuai/scientify/compare/v1.13.5...v1.13.6) (2026-03-11)
+
+### Bug Fixes
+
+* enforce Chinese output in cron runs, add language flag, and enrich hypothesis persistence ([be1dd7d](https://github.com/tsingyuai/scientify/commit/be1dd7d5937f7671edc8734f27ab310c8b430e79))
+
 ## [1.13.5](https://github.com/tsingyuai/scientify/compare/v1.13.4...v1.13.5) (2026-03-10)
 
 ### Documentation
