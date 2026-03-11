@@ -68,6 +68,7 @@ export type SubscriptionOptions = {
   noDeliver: boolean;
   topic?: string;
   message?: string;
+  language?: "zh" | "en" | "auto";
   maxPapers?: number;
   recencyDays?: number;
   sources?: string[];

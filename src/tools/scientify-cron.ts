@@ -100,6 +100,11 @@ export const ScientifyCronToolSchema = Type.Object({
         "If true, allow metadata-only reading (skip full-text-first strict default). Use only when user explicitly requests it.",
     }),
   ),
+  language: Type.Optional(
+    Type.String({
+      description: 'Optional output language hint: "zh", "en", or "auto".',
+    }),
+  ),
   run_now: Type.Optional(
     Type.Boolean({
       description:
@@ -339,17 +344,30 @@ function lastPushedAtMs(status: IncrementalStatus | undefined): number {
   return status?.lastPushedAtMs ?? 0;
 }
 
-function hasFreshRun(before: IncrementalStatus | undefined, after: IncrementalStatus): boolean {
+function hasFreshRun(
+  before: IncrementalStatus | undefined,
+  after: IncrementalStatus,
+  runStartedAtMs: number,
+): boolean {
   const beforeRunId = latestRunId(before);
   const afterRunId = latestRunId(after);
+  const hasFreshTimestamp =
+    lastRunAtMs(after) >= runStartedAtMs || lastPushedAtMs(after) >= runStartedAtMs;
   if (!before) {
-    return after.totalRuns > 0 || Boolean(afterRunId) || lastRunAtMs(after) > 0 || lastPushedAtMs(after) > 0;
+    return hasFreshTimestamp;
   }
   if (after.totalRuns > before.totalRuns) return true;
   if (afterRunId && beforeRunId && afterRunId !== beforeRunId) return true;
   if (!beforeRunId && afterRunId) return true;
   if (lastRunAtMs(after) > lastRunAtMs(before)) return true;
   if (lastPushedAtMs(after) > lastPushedAtMs(before)) return true;
+  if (
+    hasFreshTimestamp &&
+    lastRunAtMs(before) < runStartedAtMs &&
+    lastPushedAtMs(before) < runStartedAtMs
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -420,6 +438,11 @@ function serializeRunStatusSnapshot(
             last_updated_at_ms: status.knowledgeStateSummary.triggerState.lastUpdatedAtMs,
           },
           quality_gate: {
+            mode: status.knowledgeStateSummary.qualityGate.mode,
+            severity: status.knowledgeStateSummary.qualityGate.severity,
+            warnings: status.knowledgeStateSummary.qualityGate.warnings,
+            fatal_reasons: status.knowledgeStateSummary.qualityGate.fatalReasons,
+            blocking: status.knowledgeStateSummary.qualityGate.blocking,
             passed: status.knowledgeStateSummary.qualityGate.passed,
             full_text_coverage_pct: status.knowledgeStateSummary.qualityGate.fullTextCoveragePct,
             evidence_binding_rate_pct: status.knowledgeStateSummary.qualityGate.evidenceBindingRatePct,
@@ -431,9 +454,31 @@ function serializeRunStatusSnapshot(
             rejected: status.knowledgeStateSummary.hypothesisGate.rejected,
             rejection_reasons: status.knowledgeStateSummary.hypothesisGate.rejectionReasons,
           },
+          last_run_at_ms: status.knowledgeStateSummary.lastRunAtMs ?? null,
+          last_status: status.knowledgeStateSummary.lastStatus ?? null,
+          recent_hypotheses: status.knowledgeStateSummary.recentHypotheses.map((item) => ({
+            id: item.id,
+            statement: item.statement,
+            trigger: item.trigger,
+            created_at_ms: item.createdAtMs,
+            file: item.file,
+            strict_overall_score:
+              typeof item.strictOverallScore === "number" ? item.strictOverallScore : null,
+            strict_decision: item.strictDecision ?? null,
+          })),
           last_reflection_tasks: status.knowledgeStateSummary.lastReflectionTasks,
         }
       : null,
+    recent_hypotheses: status.recentHypotheses.map((item) => ({
+      id: item.id,
+      statement: item.statement,
+      trigger: item.trigger,
+      created_at_ms: item.createdAtMs,
+      file: item.file,
+      strict_overall_score:
+        typeof item.strictOverallScore === "number" ? item.strictOverallScore : null,
+      strict_decision: item.strictDecision ?? null,
+    })),
     recent_change_stats: status.recentChangeStats.map((item) => ({
       day: item.day,
       run_id: item.runId,
@@ -473,6 +518,39 @@ function serializeRunStatusSnapshot(
           "pushCount" in paper && typeof paper.pushCount === "number"
             ? paper.pushCount
             : fromGlobal?.pushCount ?? null,
+        full_text_read:
+          "fullTextRead" in paper && typeof paper.fullTextRead === "boolean"
+            ? paper.fullTextRead
+            : null,
+        read_status:
+          "readStatus" in paper && typeof paper.readStatus === "string"
+            ? paper.readStatus
+            : null,
+        unread_reason:
+          "unreadReason" in paper && typeof paper.unreadReason === "string"
+            ? paper.unreadReason
+            : null,
+        evidence_anchors:
+          "evidenceAnchors" in paper && Array.isArray(paper.evidenceAnchors)
+            ? paper.evidenceAnchors.map((anchor) => ({
+                section:
+                  anchor && typeof anchor === "object" && "section" in anchor && typeof anchor.section === "string"
+                    ? anchor.section
+                    : null,
+                locator:
+                  anchor && typeof anchor === "object" && "locator" in anchor && typeof anchor.locator === "string"
+                    ? anchor.locator
+                    : null,
+                claim:
+                  anchor && typeof anchor === "object" && "claim" in anchor && typeof anchor.claim === "string"
+                    ? anchor.claim
+                    : null,
+                quote:
+                  anchor && typeof anchor === "object" && "quote" in anchor && typeof anchor.quote === "string"
+                    ? anchor.quote
+                    : null,
+              }))
+            : [],
       };
     }),
     global_recent_papers: status.recentPapers.map((paper) => ({
@@ -499,6 +577,7 @@ function buildSubscribeArgs(params: Record<string, unknown>): string {
   const resolved = resolveTopicAndMessage(params);
   const topic = resolved.topic;
   const message = resolved.message;
+  const scope = readStringParam(params, "scope");
 
   if (topic) {
     parts.push("--topic", quoteArg(topic));
@@ -511,6 +590,22 @@ function buildSubscribeArgs(params: Record<string, unknown>): string {
 
   if (message) {
     parts.push("--message", quoteArg(message));
+  }
+
+  const explicitLanguage = readStringParam(params, "language");
+  const languageCandidate = (() => {
+    if (explicitLanguage && ["zh", "en", "auto"].includes(explicitLanguage.toLowerCase())) {
+      return explicitLanguage.toLowerCase();
+    }
+    const channel = readStringParam(params, "channel");
+    if (channel && channel.toLowerCase() === "feishu") return "zh";
+    if (scope && scope.toLowerCase().includes("feishu")) return "zh";
+    const text = `${topic ?? ""} ${message ?? ""}`.trim();
+    if (/[\p{Script=Han}]/u.test(text)) return "zh";
+    return undefined;
+  })();
+  if (languageCandidate) {
+    parts.push("--language", quoteArg(languageCandidate));
   }
 
   const maxPapers = readNumberParam(params, "max_papers");
@@ -560,6 +655,11 @@ function buildSubscribeArgs(params: Record<string, unknown>): string {
 
   if (readBooleanParam(params, "metadata_only")) {
     parts.push("--metadata-only");
+  }
+
+  const language = readStringParam(params, "language");
+  if (language && ["zh", "en", "auto"].includes(language.toLowerCase())) {
+    parts.push("--language", quoteArg(language.toLowerCase()));
   }
 
   return parts.join(" ");
@@ -642,6 +742,7 @@ export function createScientifyCronTool(deps: CronToolDeps) {
               "--timeout",
               "900000",
             ];
+            const runStartedAtMs = Date.now();
             let runRes = await deps.runtime.system.runCommandWithTimeout(runArgsPrimary, {
               timeoutMs: 920_000,
             });
@@ -683,7 +784,7 @@ export function createScientifyCronTool(deps: CronToolDeps) {
                       ...(project ? { projectId: project } : {}),
                     }).catch(() => undefined);
                     const before = beforeStatusByScope.get(statusScope);
-                    if (fetched && hasFreshRun(before, fetched)) {
+                    if (fetched && hasFreshRun(before, fetched, runStartedAtMs)) {
                       status = fetched;
                       statusScopeUsed = statusScope;
                       break;
@@ -738,7 +839,7 @@ export function createScientifyCronTool(deps: CronToolDeps) {
                         ...(project ? { projectId: project } : {}),
                       }).catch(() => undefined);
                       const before = beforeStatusByScope.get(statusScope);
-                      if (fetched && hasFreshRun(before, fetched)) {
+                      if (fetched && hasFreshRun(before, fetched, runStartedAtMs)) {
                         status = fetched;
                         statusScopeUsed = statusScope;
                         break;
@@ -774,7 +875,7 @@ export function createScientifyCronTool(deps: CronToolDeps) {
               scope,
               job_id: jobId,
               run_now: true,
-              run_result: runRes.stdout.trim(),
+              run_status: runRes.code === 0 ? "ok" : "already-running",
               ...(statusSnapshot ? { status_json: statusSnapshot } : {}),
               result: text,
             });

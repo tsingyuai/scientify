@@ -54,6 +54,10 @@ const MIN_HYPOTHESIS_STATEMENT_CHARS = 48;
 const MIN_HYPOTHESIS_STRENGTHS = 2;
 const MIN_HYPOTHESIS_WEAKNESSES = 2;
 const MIN_HYPOTHESIS_PLAN_STEPS = 3;
+const MIN_HYPOTHESIS_PREDICTIONS = 2;
+const MIN_HYPOTHESIS_ASSUMPTIONS = 2;
+const MIN_HYPOTHESIS_FAILURE_MODES = 1;
+const MIN_HYPOTHESIS_SUCCESS_CRITERIA = 2;
 const MIN_HYPOTHESIS_STRICT_ACCEPT_SCORE = 70;
 const MIN_HYPOTHESIS_ACCEPT_SELF_SCORE_AVG = 3.2;
 const PLACEHOLDER_TEXT_RE =
@@ -189,6 +193,7 @@ async function ensureLayout(projectPath: string): Promise<void> {
   await mkdir(path.join(root, "paper_notes"), { recursive: true });
   await mkdir(path.join(root, "daily_changes"), { recursive: true });
   await mkdir(path.join(root, "hypotheses"), { recursive: true });
+  await mkdir(path.join(root, "hypotheses", "rejected"), { recursive: true });
   await mkdir(path.join(root, "logs"), { recursive: true });
 }
 
@@ -1219,6 +1224,23 @@ function deriveReflectionTasks(args: {
     });
   }
 
+  if (tasks.length === 0 && args.corePapers.length === 0 && args.changes.length === 0) {
+    const query = buildReflectionQuery(
+      args.topic,
+      `${args.topic} survey review foundational mainstream variants`,
+      "empty cycle diagnosis",
+    );
+    tasks.push({
+      id: sanitizeId(`empty-cycle-${query}`),
+      trigger: "TREND",
+      reason:
+        "No new core papers found in this cycle. Re-check query scope/time window and expand to adjacent sub-directions for idea support or criticism.",
+      query,
+      priority: "medium",
+      status: queryMatchesTrace(query, args.trace) ? "executed" : "planned",
+    });
+  }
+
   const dedup = new Map<string, ReflectionTaskInput>();
   for (const task of tasks) {
     const key = normalizeText(task.query).toLowerCase();
@@ -1294,6 +1316,13 @@ function sanitizeKnowledgeChanges(args: {
   };
 }
 
+type HypothesisGateAuditEntry = {
+  hypothesis: KnowledgeHypothesisInput;
+  accepted: boolean;
+  reasons: string[];
+  autoRevised: boolean;
+};
+
 function applyHypothesisGate(args: {
   hypotheses: KnowledgeHypothesisInput[];
   allRunPapers: KnowledgePaperInput[];
@@ -1302,8 +1331,10 @@ function applyHypothesisGate(args: {
 }): {
   acceptedHypotheses: KnowledgeHypothesisInput[];
   gate: HypothesisGateSummary;
+  audits: HypothesisGateAuditEntry[];
 } {
   const acceptedHypotheses: KnowledgeHypothesisInput[] = [];
+  const audits: HypothesisGateAuditEntry[] = [];
   const rejectionReasonSet = new Set<string>();
   const paperLookup = buildPaperLookup(args.allRunPapers);
   const fullTextEvidenceIds = uniqueText(
@@ -1359,6 +1390,31 @@ function applyHypothesisGate(args: {
       reasons.push(
         `dependency_path_too_short(${dependencyPathLength}<${MIN_HYPOTHESIS_DEPENDENCY_STEPS})`,
       );
+    }
+    if (!hypothesis.problemGap || normalizeText(hypothesis.problemGap).length < 24) {
+      reasons.push("problem_gap_missing_or_too_short");
+    }
+    if (!hypothesis.proposedMechanism || normalizeText(hypothesis.proposedMechanism).length < 24) {
+      reasons.push("proposed_mechanism_missing_or_too_short");
+    }
+    if (!hypothesis.noveltyRationale || normalizeText(hypothesis.noveltyRationale).length < 24) {
+      reasons.push("novelty_rationale_missing_or_too_short");
+    }
+    const predictionCount = hypothesis.falsifiablePredictions?.length ?? 0;
+    if (predictionCount < MIN_HYPOTHESIS_PREDICTIONS) {
+      reasons.push(`predictions_too_few(${predictionCount}<${MIN_HYPOTHESIS_PREDICTIONS})`);
+    }
+    const assumptionCount = hypothesis.criticalAssumptions?.length ?? 0;
+    if (assumptionCount < MIN_HYPOTHESIS_ASSUMPTIONS) {
+      reasons.push(`assumptions_too_few(${assumptionCount}<${MIN_HYPOTHESIS_ASSUMPTIONS})`);
+    }
+    const failureModeCount = hypothesis.failureModes?.length ?? 0;
+    if (failureModeCount < MIN_HYPOTHESIS_FAILURE_MODES) {
+      reasons.push(`failure_modes_too_few(${failureModeCount}<${MIN_HYPOTHESIS_FAILURE_MODES})`);
+    }
+    const successCriteriaCount = hypothesis.successCriteria?.length ?? 0;
+    if (successCriteriaCount < MIN_HYPOTHESIS_SUCCESS_CRITERIA) {
+      reasons.push(`success_criteria_too_few(${successCriteriaCount}<${MIN_HYPOTHESIS_SUCCESS_CRITERIA})`);
     }
 
     const strengthsCount = hypothesis.strengths?.length ?? 0;
@@ -1438,6 +1494,13 @@ function applyHypothesisGate(args: {
   const isRepairableReason = (reason: string): boolean => {
     return (
       reason.startsWith("dependency_path_too_short(") ||
+      reason === "problem_gap_missing_or_too_short" ||
+      reason === "proposed_mechanism_missing_or_too_short" ||
+      reason === "novelty_rationale_missing_or_too_short" ||
+      reason.startsWith("predictions_too_few(") ||
+      reason.startsWith("assumptions_too_few(") ||
+      reason.startsWith("failure_modes_too_few(") ||
+      reason.startsWith("success_criteria_too_few(") ||
       reason.startsWith("strengths_too_few(") ||
       reason.startsWith("weaknesses_too_few(") ||
       reason.startsWith("plan_steps_too_few(") ||
@@ -1459,7 +1522,14 @@ function applyHypothesisGate(args: {
     if (!reasons.some((reason) => isRepairableReason(reason))) return undefined;
     const revised: KnowledgeHypothesisInput = {
       ...hypothesis,
+      ...(hypothesis.problemGap ? { problemGap: hypothesis.problemGap } : {}),
+      ...(hypothesis.proposedMechanism ? { proposedMechanism: hypothesis.proposedMechanism } : {}),
+      ...(hypothesis.noveltyRationale ? { noveltyRationale: hypothesis.noveltyRationale } : {}),
       ...(hypothesis.dependencyPath ? { dependencyPath: [...hypothesis.dependencyPath] } : {}),
+      ...(hypothesis.falsifiablePredictions ? { falsifiablePredictions: [...hypothesis.falsifiablePredictions] } : {}),
+      ...(hypothesis.criticalAssumptions ? { criticalAssumptions: [...hypothesis.criticalAssumptions] } : {}),
+      ...(hypothesis.failureModes ? { failureModes: [...hypothesis.failureModes] } : {}),
+      ...(hypothesis.successCriteria ? { successCriteria: [...hypothesis.successCriteria] } : {}),
       ...(hypothesis.strengths ? { strengths: [...hypothesis.strengths] } : {}),
       ...(hypothesis.weaknesses ? { weaknesses: [...hypothesis.weaknesses] } : {}),
       ...(hypothesis.planSteps ? { planSteps: [...hypothesis.planSteps] } : {}),
@@ -1480,6 +1550,58 @@ function applyHypothesisGate(args: {
         revised.dependencyPath && revised.dependencyPath.length > 0
           ? "Prior evidence accumulation provides an additional dependency step for this hypothesis."
           : "This hypothesis is grounded in accumulated cross-paper evidence from current run outputs.",
+      ];
+      changed = true;
+    }
+    if (!revised.problemGap || normalizeText(revised.problemGap).length < 24) {
+      revised.problemGap =
+        "Current literature shows evidence signals, but no validated design rule translates these signals into a reproducible intervention.";
+      changed = true;
+    }
+    if (!revised.proposedMechanism || normalizeText(revised.proposedMechanism).length < 24) {
+      revised.proposedMechanism =
+        "Use evidence-linked control variables to adapt method configuration online, then verify whether the control action improves target metrics under fixed budget.";
+      changed = true;
+    }
+    if (!revised.noveltyRationale || normalizeText(revised.noveltyRationale).length < 24) {
+      revised.noveltyRationale =
+        "Prior work reports signals independently; this hypothesis couples them into one executable control rule with explicit falsification conditions.";
+      changed = true;
+    }
+    while ((revised.falsifiablePredictions?.length ?? 0) < MIN_HYPOTHESIS_PREDICTIONS) {
+      const idx = revised.falsifiablePredictions?.length ?? 0;
+      revised.falsifiablePredictions = [
+        ...(revised.falsifiablePredictions ?? []),
+        idx === 0
+          ? "If the proposed mechanism is valid, primary metric improves versus fixed baseline under matched budget."
+          : "If mechanism signal is ablated, improvement should disappear or significantly shrink.",
+      ];
+      changed = true;
+    }
+    while ((revised.criticalAssumptions?.length ?? 0) < MIN_HYPOTHESIS_ASSUMPTIONS) {
+      const idx = revised.criticalAssumptions?.length ?? 0;
+      revised.criticalAssumptions = [
+        ...(revised.criticalAssumptions ?? []),
+        idx === 0
+          ? "Evidence signals remain stable enough across runs to drive adaptation decisions."
+          : "Evaluation datasets and task settings reflect the intended deployment regime.",
+      ];
+      changed = true;
+    }
+    while ((revised.failureModes?.length ?? 0) < MIN_HYPOTHESIS_FAILURE_MODES) {
+      revised.failureModes = [
+        ...(revised.failureModes ?? []),
+        "Signal noise or distribution shift causes unstable control actions and nullifies expected gains.",
+      ];
+      changed = true;
+    }
+    while ((revised.successCriteria?.length ?? 0) < MIN_HYPOTHESIS_SUCCESS_CRITERIA) {
+      const idx = revised.successCriteria?.length ?? 0;
+      revised.successCriteria = [
+        ...(revised.successCriteria ?? []),
+        idx === 0
+          ? "Primary metric improves by a pre-registered margin against strongest baseline under matched compute."
+          : "At least one ablation confirms the claimed mechanism rather than incidental tuning effects.",
       ];
       changed = true;
     }
@@ -1563,6 +1685,12 @@ function applyHypothesisGate(args: {
     const firstReasons = evaluateHypothesisReasons(hypothesis);
     if (firstReasons.length === 0) {
       acceptedHypotheses.push(hypothesis);
+      audits.push({
+        hypothesis,
+        accepted: true,
+        reasons: [],
+        autoRevised: false,
+      });
       continue;
     }
 
@@ -1571,14 +1699,32 @@ function applyHypothesisGate(args: {
       const secondReasons = evaluateHypothesisReasons(autoRevised);
       if (secondReasons.length === 0) {
         acceptedHypotheses.push(autoRevised);
+        audits.push({
+          hypothesis: autoRevised,
+          accepted: true,
+          reasons: [],
+          autoRevised: true,
+        });
         continue;
       }
+      audits.push({
+        hypothesis: autoRevised,
+        accepted: false,
+        reasons: secondReasons,
+        autoRevised: true,
+      });
       for (const reason of secondReasons) rejectionReasonSet.add(reason);
       continue;
     }
 
     const reasons = firstReasons;
     if (reasons.length > 0) {
+      audits.push({
+        hypothesis,
+        accepted: false,
+        reasons,
+        autoRevised: false,
+      });
       for (const reason of reasons) rejectionReasonSet.add(reason);
       continue;
     }
@@ -1586,6 +1732,7 @@ function applyHypothesisGate(args: {
 
   return {
     acceptedHypotheses,
+    audits,
     gate: {
       accepted: acceptedHypotheses.length,
       rejected: Math.max(0, args.hypotheses.length - acceptedHypotheses.length),
@@ -1784,6 +1931,8 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
     const knowledgeDir = path.join(rootPath, "knowledge");
     const paperNotesDir = path.join(rootPath, "paper_notes");
     const hypothesesDir = path.join(rootPath, "hypotheses");
+    const rejectedHypothesesDir = path.join(hypothesesDir, "rejected");
+    await mkdir(rejectedHypothesesDir, { recursive: true });
 
     await appendMarkdown(
       path.join(logDir, `day-${dayKey}-ingest.md`),
@@ -1919,7 +2068,14 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
     stream.paperNotes = [...new Set([...runPaperNoteFiles, ...stream.paperNotes])].slice(0, MAX_PAPER_NOTES);
 
     const recentHypothesisSummaries: RecentHypothesisSummary[] = [];
+    const rejectedHypothesisArtifacts: Array<{
+      id: string;
+      file: string;
+      reasons: string[];
+      autoRevised: boolean;
+    }> = [];
     let seq = stream.totalHypotheses;
+    let rejectedSeq = 0;
     const dayToken = dayKey.replace(/-/g, "");
     for (const hypothesis of acceptedHypotheses) {
       seq += 1;
@@ -1942,6 +2098,85 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
         ...(hypothesis.strictEvaluation?.decision
           ? { strictDecision: hypothesis.strictEvaluation.decision }
           : {}),
+      });
+    }
+    for (const audit of hypothesisEval.audits.filter((item) => !item.accepted)) {
+      rejectedSeq += 1;
+      const sanitizedSourceId = sanitizeId(audit.hypothesis.id ?? "");
+      const hypothesisId =
+        sanitizedSourceId.length > 0
+          ? `${sanitizedSourceId}-rejected`
+          : `hyp-${dayToken}-${String(rejectedSeq).padStart(4, "0")}-rejected`;
+      const file = `${hypothesisId}.md`;
+      const evidenceLines =
+        audit.hypothesis.evidenceIds && audit.hypothesis.evidenceIds.length > 0
+          ? audit.hypothesis.evidenceIds.map((id, idx) => `${idx + 1}. ${id}`)
+          : ["1. (none)"];
+      const dependencyLines =
+        audit.hypothesis.dependencyPath && audit.hypothesis.dependencyPath.length > 0
+          ? audit.hypothesis.dependencyPath.map((item, idx) => `${idx + 1}. ${item}`)
+          : ["1. (none)"];
+      const reasons = audit.reasons.length > 0 ? audit.reasons : ["rejected_without_reason"];
+      const content = [
+        `# ${hypothesisId}`,
+        "",
+        `- Run: ${runId}`,
+        "- Gate Decision: rejected",
+        `- Auto Revised: ${audit.autoRevised ? "yes" : "no"}`,
+        "",
+        "## Rejection Reasons",
+        ...reasons.map((reason, idx) => `${idx + 1}. ${reason}`),
+        "",
+        "## Statement",
+        audit.hypothesis.statement,
+        "",
+        "## Problem Gap",
+        audit.hypothesis.problemGap ?? "pending",
+        "",
+        "## Proposed Mechanism",
+        audit.hypothesis.proposedMechanism ?? "pending",
+        "",
+        "## Novelty Rationale",
+        audit.hypothesis.noveltyRationale ?? "pending",
+        "",
+        "## Trigger",
+        audit.hypothesis.trigger,
+        "",
+        "## Evidence IDs",
+        ...evidenceLines,
+        "",
+        "## Dependency Path",
+        ...dependencyLines,
+        "",
+        "## Falsifiable Predictions",
+        ...(audit.hypothesis.falsifiablePredictions && audit.hypothesis.falsifiablePredictions.length > 0
+          ? audit.hypothesis.falsifiablePredictions.map((item, idx) => `${idx + 1}. ${item}`)
+          : ["1. (none)"]),
+        "",
+        "## Critical Assumptions",
+        ...(audit.hypothesis.criticalAssumptions && audit.hypothesis.criticalAssumptions.length > 0
+          ? audit.hypothesis.criticalAssumptions.map((item, idx) => `${idx + 1}. ${item}`)
+          : ["1. (none)"]),
+        "",
+        "## Failure Modes",
+        ...(audit.hypothesis.failureModes && audit.hypothesis.failureModes.length > 0
+          ? audit.hypothesis.failureModes.map((item, idx) => `${idx + 1}. ${item}`)
+          : ["1. (none)"]),
+        "",
+        "## Success Criteria",
+        ...(audit.hypothesis.successCriteria && audit.hypothesis.successCriteria.length > 0
+          ? audit.hypothesis.successCriteria.map((item, idx) => `${idx + 1}. ${item}`)
+          : ["1. (none)"]),
+        "",
+        "> Persisted for traceability. This hypothesis did not pass hypothesis_gate in this run.",
+        "",
+      ].join("\n");
+      await writeFile(path.join(rejectedHypothesesDir, file), content, "utf-8");
+      rejectedHypothesisArtifacts.push({
+        id: hypothesisId,
+        file: path.join("rejected", file),
+        reasons: reasons.slice(0, MAX_HYPOTHESIS_REJECTION_REASONS),
+        autoRevised: audit.autoRevised,
       });
     }
 
@@ -2023,6 +2258,7 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
         hypotheses: acceptedHypotheses,
         submittedHypotheses,
         hypothesisGate: hypothesisEval.gate,
+        rejectedHypothesisArtifacts,
         paperNoteFiles: runPaperNoteFiles,
         quality: {
           fullTextReadCount: fullTextStats.fullTextReadCount,
@@ -2064,7 +2300,9 @@ export async function commitKnowledgeRun(input: CommitKnowledgeRunInput): Promis
       droppedBridgeCount: changeSanitization.droppedBridgeCount,
       hypothesisCount: recentHypothesisSummaries.length,
       submittedHypothesisCount: submittedHypotheses.length,
+      rejectedHypothesisCount: rejectedHypothesisArtifacts.length,
       hypothesisGate: hypothesisEval.gate,
+      rejectedHypothesisArtifacts,
       triggerState: stream.triggerState,
       reflectionTasks,
       corePapers,

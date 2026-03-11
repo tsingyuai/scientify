@@ -389,6 +389,7 @@ export function parseSubscribeOptions(rawArgs: string | undefined): Subscription
   let topic: string | undefined;
   let message: string | undefined;
   let metadataOnly = false;
+  let language: "zh" | "en" | "auto" | undefined;
   let maxPapers: number | undefined;
   let recencyDays: number | undefined;
   let sources: string[] | undefined;
@@ -463,6 +464,20 @@ export function parseSubscribeOptions(rawArgs: string | undefined): Subscription
         return { error: "Error: `--message` expects a value, e.g. `--message \"Time to drink water.\"`." };
       }
       message = value;
+      i++;
+      continue;
+    }
+
+    if (token === "--language" || token === "--lang") {
+      const value = tokens[i + 1];
+      if (!value) {
+        return { error: "Error: `--language` expects a value, e.g. `--language zh` or `--language en`." };
+      }
+      const normalized = value.trim().toLowerCase();
+      if (normalized !== "zh" && normalized !== "en" && normalized !== "auto") {
+        return { error: "Error: `--language` must be one of: zh, en, auto." };
+      }
+      language = normalized as "zh" | "en" | "auto";
       i++;
       continue;
     }
@@ -567,6 +582,7 @@ export function parseSubscribeOptions(rawArgs: string | undefined): Subscription
     noDeliver,
     topic,
     message,
+    ...(language ? { language } : {}),
     ...(maxPapers !== undefined ? { maxPapers } : {}),
     ...(recencyDays !== undefined ? { recencyDays } : {}),
     ...(sources && sources.length > 0 ? { sources } : {}),

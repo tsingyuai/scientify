@@ -90,7 +90,14 @@ export type KnowledgeHypothesisInput = {
   id?: string;
   statement: string;
   trigger: "GAP" | "BRIDGE" | "TREND" | "CONTRADICTION";
+  problemGap?: string;
+  proposedMechanism?: string;
+  noveltyRationale?: string;
   dependencyPath?: string[];
+  falsifiablePredictions?: string[];
+  criticalAssumptions?: string[];
+  failureModes?: string[];
+  successCriteria?: string[];
   strengths?: string[];
   weaknesses?: string[];
   planSteps?: string[];

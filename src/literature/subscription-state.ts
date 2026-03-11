@@ -130,6 +130,7 @@ type TopicState = {
   memory: TopicMemoryState;
   pushedPapers: Record<string, TopicPaperState>;
   totalRuns: number;
+  emptyRunStreak?: number;
   lastRunAtMs?: number;
   lastStatus?: string;
   lastProjectId?: string;
@@ -691,6 +692,14 @@ type RequirementProfile = {
   preferRecent: boolean;
 };
 
+type RecallTierRatios = {
+  tierA: number;
+  tierB: number;
+  tierC: number;
+};
+
+type AdaptiveResearchStage = "bootstrap" | "expansion" | "hypothesis_validation" | "pivot";
+
 const FOUNDATIONAL_HINT_RE =
   /\b(foundational|foundation|seminal|classic|groundwork|original paper|from basics|start from basics|first principles)\b|\u57fa\u7840|\u5950\u57fa|\u7ecf\u5178|\u539f\u59cb/u;
 const AVOID_BENCHMARK_HINT_RE =
@@ -784,8 +793,9 @@ function buildTieredFallbackQueries(topic: string): Record<RecallTier, string[]>
   const tierC = dedupeQueries(
     [
       ...tokens.slice(0, 5).map((token) => `${token} transfer learning`),
-      ...tokens.slice(0, 5).map((token) => `${token} benchmark`),
-      ...tokens.slice(0, 5).map((token) => `${token} retrieval`),
+      ...tokens.slice(0, 5).map((token) => `${token} survey review`),
+      ...tokens.slice(0, 5).map((token) => `${token} criticism limitations`),
+      ...tokens.slice(0, 5).map((token) => `${token} failure analysis`),
       `${normalizedTopic} cross domain`,
     ],
     STRICT_EMPTY_FALLBACK_MAX_QUERIES,
@@ -806,6 +816,118 @@ function inferRequirementProfile(raw: string): RequirementProfile {
     preferSurvey: SURVEY_HINT_RE.test(text),
     preferAuthority: AUTHORITY_HINT_RE.test(text),
     preferRecent: RECENT_HINT_RE.test(text),
+  };
+}
+
+function clampRecallTierRatios(input: RecallTierRatios): RecallTierRatios {
+  const a = Number.isFinite(input.tierA) ? Math.max(0, input.tierA) : 0;
+  const b = Number.isFinite(input.tierB) ? Math.max(0, input.tierB) : 0;
+  const c = Number.isFinite(input.tierC) ? Math.max(0, input.tierC) : 0;
+  const sum = a + b + c;
+  if (sum <= 0) {
+    return { tierA: TIER_A_RATIO, tierB: TIER_B_RATIO, tierC: TIER_C_RATIO };
+  }
+  return {
+    tierA: a / sum,
+    tierB: b / sum,
+    tierC: c / sum,
+  };
+}
+
+function pickAdaptiveResearchStage(args: {
+  totalRuns: number;
+  knownPaperCount: number;
+  hasSubmittedHypothesis: boolean;
+  emptyRunStreak: number;
+}): AdaptiveResearchStage {
+  if (args.emptyRunStreak >= 2) return "pivot";
+  if (args.hasSubmittedHypothesis) return "hypothesis_validation";
+  if (args.totalRuns <= 2 || args.knownPaperCount < 6) return "bootstrap";
+  return "expansion";
+}
+
+function deriveAdaptiveRequirementProfile(args: {
+  base: RequirementProfile;
+  stage: AdaptiveResearchStage;
+}): RequirementProfile {
+  if (args.stage === "bootstrap") {
+    return {
+      ...args.base,
+      foundationalFirst: true,
+      preferSurvey: true,
+      preferAuthority: true,
+    };
+  }
+  if (args.stage === "hypothesis_validation") {
+    return {
+      ...args.base,
+      avoidBenchmarkOnly: true,
+      preferAuthority: true,
+      preferRecent: true,
+    };
+  }
+  if (args.stage === "pivot") {
+    return {
+      ...args.base,
+      avoidBenchmarkOnly: true,
+      preferAuthority: true,
+      preferSurvey: false,
+      foundationalFirst: false,
+      preferRecent: true,
+    };
+  }
+  return args.base;
+}
+
+function deriveAdaptiveRecallTierRatios(stage: AdaptiveResearchStage): RecallTierRatios {
+  if (stage === "bootstrap") {
+    return clampRecallTierRatios({ tierA: 0.45, tierB: 0.4, tierC: 0.15 });
+  }
+  if (stage === "hypothesis_validation") {
+    return clampRecallTierRatios({ tierA: 0.4, tierB: 0.3, tierC: 0.3 });
+  }
+  if (stage === "pivot") {
+    return clampRecallTierRatios({ tierA: 0.3, tierB: 0.3, tierC: 0.4 });
+  }
+  return clampRecallTierRatios({ tierA: TIER_A_RATIO, tierB: TIER_B_RATIO, tierC: TIER_C_RATIO });
+}
+
+function buildEmptyCycleAutoDiagnosis(args: {
+  topic: string;
+  stage: AdaptiveResearchStage;
+  knownPaperCount: number;
+  totalRuns: number;
+  emptyRunStreak: number;
+}): {
+  diagnosis: string;
+  nextQueries: string[];
+  pivotHint: string;
+} {
+  const baseTopic = normalizeText(args.topic);
+  const nextQueries = [
+    `${baseTopic} survey review foundational`,
+    `${baseTopic} method theory variant`,
+    args.stage === "hypothesis_validation" || args.stage === "pivot"
+      ? `${baseTopic} criticism failure limitations related work`
+      : `${baseTopic} adjacent transfer domain adaptation`,
+  ].map((item) => normalizeText(item));
+
+  const isLikelySaturation = args.knownPaperCount >= 8 && args.totalRuns >= 3;
+  const diagnosis =
+    args.emptyRunStreak >= 2
+      ? "repeated_empty_cycle_likely_scope_saturation_or_query_mismatch"
+      : isLikelySaturation
+        ? "likely_scope_saturation_check_adjacent_subdomains"
+        : "likely_query_or_recency_mismatch_expand_terms_and_time_window";
+  const pivotHint =
+    args.stage === "pivot" || args.emptyRunStreak >= 2
+      ? "consider a nearby sub-direction that serves current idea validation (supporting and critical evidence)."
+      : "continue current direction with broadened query and include foundational plus adjacent variants.";
+
+  return {
+    diagnosis,
+    nextQueries,
+    pivotHint,
   };
 }
 
@@ -938,6 +1060,7 @@ async function strictCoreFallbackSeed(args: {
   minCoreFloor?: number;
   knownPaperIds: Set<string>;
   requirements: RequirementProfile;
+  tierRatios?: RecallTierRatios;
 }): Promise<{
   papers: PaperRecordInput[];
   corePapers: KnowledgePaperInput[];
@@ -1012,6 +1135,9 @@ async function strictCoreFallbackSeed(args: {
     Math.min(40, Math.floor(args.candidatePool ?? Math.max(DEFAULT_STRICT_CANDIDATE_POOL, args.maxPapers * 4))),
   );
   const minCoreFloor = Math.max(1, Math.min(args.maxPapers, args.minCoreFloor ?? DEFAULT_STRICT_MIN_CORE_FLOOR));
+  const tierRatios = clampRecallTierRatios(
+    args.tierRatios ?? { tierA: TIER_A_RATIO, tierB: TIER_B_RATIO, tierC: TIER_C_RATIO },
+  );
   const effectivePoolByRelevance = poolBeforeRelevance.filter((item) => item.relevance >= minRelevance);
   const focusTokens = scoringTokens.filter((token) => token.length >= 5);
   const weakRelevanceWithFocusPool = poolBeforeRelevance.filter((item) => {
@@ -1031,9 +1157,12 @@ async function strictCoreFallbackSeed(args: {
         : poolBeforeRelevance;
   const targetCount = Math.max(minCoreFloor, Math.min(args.maxPapers, candidatePool));
   const tierTargets = {
-    tierA: Math.max(1, Math.round(targetCount * TIER_A_RATIO)),
-    tierB: Math.max(1, Math.round(targetCount * TIER_B_RATIO)),
-    tierC: Math.max(0, targetCount - Math.round(targetCount * TIER_A_RATIO) - Math.round(targetCount * TIER_B_RATIO)),
+    tierA: Math.max(1, Math.round(targetCount * tierRatios.tierA)),
+    tierB: Math.max(1, Math.round(targetCount * tierRatios.tierB)),
+    tierC: Math.max(
+      0,
+      targetCount - Math.round(targetCount * tierRatios.tierA) - Math.round(targetCount * tierRatios.tierB),
+    ),
   };
   if (tierTargets.tierA + tierTargets.tierB + tierTargets.tierC < targetCount) {
     tierTargets.tierA += targetCount - (tierTargets.tierA + tierTargets.tierB + tierTargets.tierC);
@@ -1279,12 +1408,29 @@ function buildReflectionFollowupQuery(topic: string, hint: string): string {
 function resolveSingleStepReflectionSeed(args: {
   topic: string;
   knowledgeState?: KnowledgeStateInput;
-}): { trigger: "BRIDGE" | "CONFLICT" | "UNREAD_CORE"; reason: string; query: string } | undefined {
+}): {
+  trigger: "HYPOTHESIS_VALIDATE" | "BRIDGE" | "CONFLICT" | "UNREAD_CORE";
+  reason: string;
+  query: string;
+} | undefined {
+  const hypotheses = args.knowledgeState?.hypotheses ?? [];
   const changes = args.knowledgeState?.knowledgeChanges ?? [];
   const bridgeChanges = changes.filter((item) => item.type === "BRIDGE");
   const newChanges = changes.filter((item) => item.type === "NEW");
   const reviseChanges = changes.filter((item) => item.type === "REVISE");
   const unreadCore = (args.knowledgeState?.corePapers ?? []).filter((paper) => !isPaperFullTextRead(paper));
+
+  if (hypotheses.length > 0) {
+    const seed = hypotheses[0]?.statement ?? args.topic;
+    return {
+      trigger: "HYPOTHESIS_VALIDATE",
+      reason: "hypothesis_validation_followup",
+      query: buildReflectionFollowupQuery(
+        args.topic,
+        `${seed} supporting evidence critique related work limitations`,
+      ),
+    };
+  }
 
   if (bridgeChanges.length > 0) {
     const seed = bridgeChanges[0]?.statement ?? args.topic;
@@ -1612,6 +1758,9 @@ function getOrCreateTopicState(
     if (!Number.isFinite(existing.totalRuns)) {
       existing.totalRuns = 0;
     }
+    if (!Number.isFinite(existing.emptyRunStreak)) {
+      existing.emptyRunStreak = 0;
+    }
     existing.preferences = mergePreferences(existing.preferences, incomingPrefs);
 
     // Merge duplicate legacy buckets produced by old scope normalization rules.
@@ -1686,6 +1835,17 @@ function getOrCreateTopicState(
       const existingRuns = Number.isFinite(existing.totalRuns) ? Math.max(0, Math.floor(existing.totalRuns)) : 0;
       const otherRuns = Number.isFinite(other.totalRuns) ? Math.max(0, Math.floor(other.totalRuns)) : 0;
       existing.totalRuns = existingRuns + otherRuns;
+      const existingEmptyRaw = existing.emptyRunStreak;
+      const otherEmptyRaw = other.emptyRunStreak;
+      const existingEmptyRuns =
+        typeof existingEmptyRaw === "number" && Number.isFinite(existingEmptyRaw)
+          ? Math.max(0, Math.floor(existingEmptyRaw))
+          : 0;
+      const otherEmptyRuns =
+        typeof otherEmptyRaw === "number" && Number.isFinite(otherEmptyRaw)
+          ? Math.max(0, Math.floor(otherEmptyRaw))
+          : 0;
+      existing.emptyRunStreak = Math.max(existingEmptyRuns, otherEmptyRuns);
 
       const existingLastRun = existing.lastRunAtMs ?? 0;
       const otherLastRun = other.lastRunAtMs ?? 0;
@@ -1713,6 +1873,7 @@ function getOrCreateTopicState(
     memory: defaultTopicMemoryState(),
     pushedPapers: {},
     totalRuns: 0,
+    emptyRunStreak: 0,
   };
   root.topics[key] = created;
   return created;
@@ -1847,7 +2008,8 @@ export async function recordIncrementalPush(args: {
           ...(effectiveRunLog ? { runLog: effectiveRunLog } : {}),
         }
       : undefined;
-  const requirementProfile = inferRequirementProfile(
+  const knownPaperCount = Object.keys(topicState.pushedPapers).length;
+  const baseRequirementProfile = inferRequirementProfile(
     [
       topicState.topic,
       args.note,
@@ -1857,6 +2019,35 @@ export async function recordIncrementalPush(args: {
       .filter((item): item is string => Boolean(item && item.trim().length > 0))
       .join(" "),
   );
+  const adaptiveStage = pickAdaptiveResearchStage({
+    totalRuns: topicState.totalRuns,
+    knownPaperCount,
+    hasSubmittedHypothesis: (effectiveKnowledgeState?.hypotheses?.length ?? 0) > 0,
+    emptyRunStreak: Math.max(0, Math.floor(topicState.emptyRunStreak ?? 0)),
+  });
+  const requirementProfile = deriveAdaptiveRequirementProfile({
+    base: baseRequirementProfile,
+    stage: adaptiveStage,
+  });
+  const adaptiveTierRatios = deriveAdaptiveRecallTierRatios(adaptiveStage);
+
+  if (effectiveRunLog || effectiveKnowledgeState?.runLog) {
+    const mergedRunLog = {
+      ...(effectiveRunLog ?? effectiveKnowledgeState?.runLog ?? {}),
+      notes: [
+        effectiveRunLog?.notes,
+        effectiveKnowledgeState?.runLog?.notes,
+        `adaptive_stage=${adaptiveStage} known_papers=${knownPaperCount} total_runs=${topicState.totalRuns}`,
+      ]
+        .filter((item): item is string => Boolean(item && item.trim().length > 0))
+        .join(" || "),
+    };
+    effectiveRunLog = mergedRunLog;
+    effectiveKnowledgeState = {
+      ...(effectiveKnowledgeState ?? {}),
+      runLog: mergedRunLog,
+    };
+  }
 
   if (incomingRunProfile === "strict") {
     const strictMinCoreFloor = Math.max(1, Math.min(topicState.preferences.maxPapers, DEFAULT_STRICT_MIN_CORE_FLOOR));
@@ -1867,6 +2058,8 @@ export async function recordIncrementalPush(args: {
     const strictCandidatePool = Math.max(
       DEFAULT_STRICT_CANDIDATE_POOL,
       topicState.preferences.maxPapers * 4,
+      adaptiveStage === "bootstrap" ? 30 : 0,
+      adaptiveStage === "hypothesis_validation" ? 28 : 0,
     );
     const existingCorePapers = effectiveKnowledgeState?.corePapers ?? [];
     const strictSignalCount = Math.max(existingCorePapers.length, effectivePapers.length);
@@ -1883,6 +2076,7 @@ export async function recordIncrementalPush(args: {
         minCoreFloor: requiredCoreFloor,
         knownPaperIds: knownIds,
         requirements: requirementProfile,
+        tierRatios: adaptiveTierRatios,
       });
 
       if (fallback.papers.length > 0) {
@@ -1906,7 +2100,7 @@ export async function recordIncrementalPush(args: {
           notes: [
             effectiveRunLog?.notes,
             fallback.notes,
-            `strict_core_topup required=${requiredCoreFloor} before=${strictSignalCount} added=${fallbackPapers.length}`,
+            `strict_core_topup required=${requiredCoreFloor} before=${strictSignalCount} added=${fallbackPapers.length} stage=${adaptiveStage}`,
           ]
             .filter((item): item is string => Boolean(item && item.trim().length > 0))
             .join(" || "),
@@ -2055,6 +2249,34 @@ export async function recordIncrementalPush(args: {
     (effectiveKnowledgeState?.hypotheses?.length ?? 0) +
     (effectiveKnowledgeState?.explorationTrace?.length ?? 0);
   let normalizedStatus = statusRaw.length > 0 ? statusRaw : undefined;
+  if ((normalizedStatus ?? "") === "empty" && researchArtifactsCount === 0) {
+    const emptyDiagnosis = buildEmptyCycleAutoDiagnosis({
+      topic: topicState.topic,
+      stage: adaptiveStage,
+      knownPaperCount,
+      totalRuns: topicState.totalRuns,
+      emptyRunStreak: Math.max(0, Math.floor(topicState.emptyRunStreak ?? 0)),
+    });
+    const mergedRunLog = {
+      ...(effectiveRunLog ?? effectiveKnowledgeState?.runLog ?? { runProfile: incomingRunProfile ?? "strict" }),
+      notes: [
+        effectiveRunLog?.notes,
+        effectiveKnowledgeState?.runLog?.notes,
+        `empty_cycle_diagnosis=${emptyDiagnosis.diagnosis}`,
+        `empty_cycle_next_queries=${emptyDiagnosis.nextQueries.join(" || ")}`,
+        `empty_cycle_pivot_hint=${emptyDiagnosis.pivotHint}`,
+      ]
+        .filter((item): item is string => Boolean(item && item.trim().length > 0))
+        .join(" || "),
+      reflectionStepExecuted: false,
+      reflectionStepResultCount: 0,
+    };
+    effectiveRunLog = mergedRunLog;
+    effectiveKnowledgeState = {
+      ...(effectiveKnowledgeState ?? {}),
+      runLog: mergedRunLog,
+    };
+  }
   const coercedFromEmptyWithArtifacts = normalizedStatus === "empty" && researchArtifactsCount > 0;
   if (coercedFromEmptyWithArtifacts) {
     normalizedStatus = "degraded_quality";
@@ -2122,6 +2344,11 @@ export async function recordIncrementalPush(args: {
     knowledgeState: effectiveKnowledgeState,
   });
   topicState.lastStatus = knowledgeCommitted.summary.lastStatus ?? topicState.lastStatus;
+  if (topicState.lastStatus === "empty") {
+    topicState.emptyRunStreak = Math.max(0, Math.floor(topicState.emptyRunStreak ?? 0)) + 1;
+  } else {
+    topicState.emptyRunStreak = 0;
+  }
   topicState.lastProjectId = knowledgeCommitted.projectId;
 
   await saveState(root);

@@ -129,7 +129,22 @@ const KnowledgeHypothesisSchema = Type.Object({
   id: Type.Optional(Type.String({ description: "Optional hypothesis ID." })),
   statement: Type.String({ description: "Hypothesis statement." }),
   trigger: Type.String({ description: "Trigger type: GAP|BRIDGE|TREND|CONTRADICTION." }),
+  problem_gap: Type.Optional(Type.String({ description: "Problem gap this hypothesis targets." })),
+  proposed_mechanism: Type.Optional(Type.String({ description: "Mechanism that explains why the hypothesis should work." })),
+  novelty_rationale: Type.Optional(Type.String({ description: "Why this hypothesis is novel vs prior work." })),
   dependency_path: Type.Optional(Type.Array(Type.String({ description: "Dependency path steps." }))),
+  falsifiable_predictions: Type.Optional(
+    Type.Array(Type.String({ description: "Testable predictions that can falsify the hypothesis." })),
+  ),
+  critical_assumptions: Type.Optional(
+    Type.Array(Type.String({ description: "Critical assumptions that must hold for this hypothesis." })),
+  ),
+  failure_modes: Type.Optional(
+    Type.Array(Type.String({ description: "Likely failure modes or invalidity conditions." })),
+  ),
+  success_criteria: Type.Optional(
+    Type.Array(Type.String({ description: "Measurable criteria for success/failure decision." })),
+  ),
   strengths: Type.Optional(
     Type.Array(Type.String({ description: "Hypothesis strengths based on current evidence." })),
   ),
@@ -789,6 +804,46 @@ function readKnowledgeStatePayload(params: Record<string, unknown>): KnowledgeSt
             .map((v) => v.trim())
             .filter((v) => v.length > 0)
         : undefined;
+      const problemGap =
+        typeof (row.problem_gap ?? row.problemGap) === "string"
+          ? String(row.problem_gap ?? row.problemGap).trim()
+          : undefined;
+      const proposedMechanism =
+        typeof (row.proposed_mechanism ?? row.proposedMechanism) === "string"
+          ? String(row.proposed_mechanism ?? row.proposedMechanism).trim()
+          : undefined;
+      const noveltyRationale =
+        typeof (row.novelty_rationale ?? row.noveltyRationale) === "string"
+          ? String(row.novelty_rationale ?? row.noveltyRationale).trim()
+          : undefined;
+      const falsifiablePredictionsRaw = row.falsifiable_predictions ?? row.falsifiablePredictions;
+      const falsifiablePredictions = Array.isArray(falsifiablePredictionsRaw)
+        ? falsifiablePredictionsRaw
+            .filter((v): v is string => typeof v === "string")
+            .map((v) => v.trim())
+            .filter((v) => v.length > 0)
+        : undefined;
+      const criticalAssumptionsRaw = row.critical_assumptions ?? row.criticalAssumptions;
+      const criticalAssumptions = Array.isArray(criticalAssumptionsRaw)
+        ? criticalAssumptionsRaw
+            .filter((v): v is string => typeof v === "string")
+            .map((v) => v.trim())
+            .filter((v) => v.length > 0)
+        : undefined;
+      const failureModesRaw = row.failure_modes ?? row.failureModes;
+      const failureModes = Array.isArray(failureModesRaw)
+        ? failureModesRaw
+            .filter((v): v is string => typeof v === "string")
+            .map((v) => v.trim())
+            .filter((v) => v.length > 0)
+        : undefined;
+      const successCriteriaRaw = row.success_criteria ?? row.successCriteria;
+      const successCriteria = Array.isArray(successCriteriaRaw)
+        ? successCriteriaRaw
+            .filter((v): v is string => typeof v === "string")
+            .map((v) => v.trim())
+            .filter((v) => v.length > 0)
+        : undefined;
       const strengthsRaw = row.strengths;
       const strengths = Array.isArray(strengthsRaw)
         ? strengthsRaw
@@ -877,7 +932,14 @@ function readKnowledgeStatePayload(params: Record<string, unknown>): KnowledgeSt
         ...(id ? { id } : {}),
         statement,
         trigger,
+        ...(problemGap ? { problemGap } : {}),
+        ...(proposedMechanism ? { proposedMechanism } : {}),
+        ...(noveltyRationale ? { noveltyRationale } : {}),
         ...(dependencyPath && dependencyPath.length > 0 ? { dependencyPath } : {}),
+        ...(falsifiablePredictions && falsifiablePredictions.length > 0 ? { falsifiablePredictions } : {}),
+        ...(criticalAssumptions && criticalAssumptions.length > 0 ? { criticalAssumptions } : {}),
+        ...(failureModes && failureModes.length > 0 ? { failureModes } : {}),
+        ...(successCriteria && successCriteria.length > 0 ? { successCriteria } : {}),
         ...(strengths && strengths.length > 0 ? { strengths } : {}),
         ...(weaknesses && weaknesses.length > 0 ? { weaknesses } : {}),
         ...(planSteps && planSteps.length > 0 ? { planSteps } : {}),

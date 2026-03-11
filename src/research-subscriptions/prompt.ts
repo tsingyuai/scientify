@@ -58,6 +58,23 @@ function normalizeRetrievalTopic(topic: string): string {
   return stripped.length > 0 ? stripped : topic.trim();
 }
 
+function inferPreferredLanguage(text: string): "zh" | "en" | undefined {
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+  if (/[\p{Script=Han}]/u.test(trimmed)) return "zh";
+  return undefined;
+}
+
+function formatLanguageDirective(lang: "zh" | "en" | undefined): string[] {
+  if (lang === "zh") {
+    return [
+      "0) Your Output language: Chinese (Simplified).",
+      "   - Use Chinese for all content, even if the prompt is in English.",
+    ];
+  }
+  return [];
+}
+
 function buildVariantKeywords(topic: string): string[] {
   const keywords = new Set<string>();
   const normalized = normalizeRetrievalTopic(topic);
@@ -114,19 +131,26 @@ export function buildScheduledTaskMessage(
     | "candidatePool"
     | "scoreWeights"
     | "metadataOnly"
+    | "language"
   >,
   scheduleKind: ScheduleSpec["kind"],
   scopeKey: string,
+  languageHint?: "zh" | "en",
 ): string {
   const customMessage = options.message?.trim();
   const promotedTopic =
     !options.topic && customMessage && shouldPromoteMessageToResearchTopic(customMessage)
       ? deriveResearchTopicFromMessage(customMessage)
       : undefined;
+  const inferredLanguage =
+    languageHint ??
+    inferPreferredLanguage(`${options.topic ?? ""} ${options.message ?? ""}`.trim());
+  const languageDirective = formatLanguageDirective(inferredLanguage);
 
   if (customMessage && !promotedTopic) {
     return [
       "Scheduled reminder task.",
+      ...languageDirective,
       `Please send this reminder now: \"${customMessage}\"`,
       "Keep the reminder concise and do not run a research workflow unless explicitly requested.",
     ].join("\n");
@@ -136,6 +160,7 @@ export function buildScheduledTaskMessage(
   if (reminderFromTopic) {
     return [
       "Scheduled reminder task.",
+      ...languageDirective,
       `Please send this reminder now: \"${reminderFromTopic}\"`,
       "Keep the reminder concise and do not run a research workflow unless explicitly requested.",
     ].join("\n");
@@ -210,7 +235,17 @@ export function buildScheduledTaskMessage(
         {
           statement: "one grounded hypothesis",
           trigger: "TREND",
+          problem_gap: "what current literature still fails to solve",
+          proposed_mechanism: "how and why the proposed method could solve the gap",
+          novelty_rationale: "what is new versus closest prior methods",
           dependency_path: ["step 1 grounded in prior result", "step 2 links new evidence"],
+          falsifiable_predictions: [
+            "prediction 1 with measurable direction",
+            "prediction 2 that should fail if mechanism is wrong",
+          ],
+          critical_assumptions: ["assumption 1", "assumption 2"],
+          failure_modes: ["failure mode 1"],
+          success_criteria: ["criterion 1 with threshold", "criterion 2 from ablation"],
           strengths: ["strong empirical signal", "clear implementation path"],
           weaknesses: ["limited external validity", "potential data bias"],
           plan_steps: [
@@ -256,18 +291,26 @@ export function buildScheduledTaskMessage(
     status: "empty",
     papers: [],
     knowledge_state: {
-      run_log: { run_profile: runProfile, notes: "No suitable paper found in this cycle.", ...strictRunLogTemplate },
+      run_log: {
+        run_profile: runProfile,
+        notes:
+          "No suitable paper found in this cycle. empty_cycle_diagnosis=query_or_recency_mismatch_or_scope_saturation || empty_cycle_next_queries=<q1>|<q2>|<q3> || empty_cycle_pivot_hint=<how this serves current idea>",
+        ...strictRunLogTemplate,
+      },
     },
     note: "No suitable paper found in incremental pass and fallback representative pass.",
   });
   const variantHintLine =
     variantKeywords.length > 0 ? `- Expansion keywords: ${variantKeywords.join(", ")}` : "- Expansion keywords: (none)";
+  const languageDirectiveLines =
+    languageDirective.length > 0 ? languageDirective : formatLanguageDirective(inferPreferredLanguage(effectiveTopic));
 
   if (scheduleKind === "at") {
     return [
       `/research-pipeline Run a focused literature study on \"${effectiveTopic}\" and return up to ${preferences.max_papers} high-value representative papers.`,
       "",
       "Workflow (simple, Markdown-first):",
+      ...languageDirectiveLines,
       "1) Complete 5 steps in this turn: retrieve -> filter -> read -> save metadata -> update knowledge/hypothesis.",
       "2) First call prepare:",
       `${preparePayload}`,
@@ -279,6 +322,7 @@ export function buildScheduledTaskMessage(
       "   - If core candidates < 3, relax filters and rerun with broader query terms before declaring empty.",
       `4) Reading policy: ${runProfile === "strict" ? "full-text required by default (strict)." : "metadata-only allowed (explicit opt-out detected)."}`,
       "   - Never drop a relevant paper only because full text failed; keep it with full_text_read=false and unread_reason.",
+      "   - Early cycles should prioritize foundational/survey papers; later cycles should shift to mainstream variants and adjacent tracks.",
       "5) User-facing answer MUST be concise Markdown:",
       "   - Selected papers (numbered, title + URL + one-line value)",
       "   - Read status (fulltext vs metadata)",
@@ -286,18 +330,24 @@ export function buildScheduledTaskMessage(
       "   - Knowledge updates (NEW/CONFIRM/REVISE/BRIDGE)",
       "   - Hypothesis decision (generated or not + reason)",
       "   - If trigger signals are present (e.g. NEW>=2, or NEW+REVISE>=2, or BRIDGE present), propose 1 grounded hypothesis with >=2 evidence_ids and dependency_path>=2",
-      "   - Hypothesis must include: strengths>=2, weaknesses>=2, plan_steps>=3, strict_evaluation (overall_score + decision + reason).",
+      "   - Present hypothesis as a research card: gap, mechanism, novelty, falsifiable predictions, assumptions, failure modes, success criteria, executable plan.",
+      "   - Hypothesis must include: problem_gap, proposed_mechanism, novelty_rationale, falsifiable_predictions>=2, critical_assumptions>=2, failure_modes>=1, success_criteria>=2, strengths>=2, weaknesses>=2, plan_steps>=3, strict_evaluation (overall_score + decision + reason).",
       "   - Plan must be executable; when task is predictive/modeling, include at least one lightweight baseline idea (e.g., random forest).",
       "6) Persist once via `scientify_literature_state.record` using MINIMAL JSON only:",
       `${recordTemplate}`,
       "7) Soft-gate default: non-fatal quality gaps should keep status=`ok` and be reported as warnings in quality_gate.",
-      "8) Execute one immediate reflection follow-up when trigger signals exist (BRIDGE, NEW+REVISE, unread core), and write trace/results back into knowledge_state.",
+      "8) Execute one immediate reflection follow-up when trigger signals exist (hypothesis generated, BRIDGE, NEW+REVISE, unread core), and write trace/results back into knowledge_state.",
       "9) Use `degraded_quality` only for fatal gate issues (do not skip record):",
       `${recordDegradedTemplate}`,
-      "10) Use `empty` only when no paper is selected after both primary and broadened fallback retrieval:",
+      "10) Before using `empty`, perform empty-cycle diagnosis:",
+      "    - Check whether query/alias/recency is too narrow.",
+      "    - Check whether this sub-direction is likely saturated (few unseen papers across repeated cycles).",
+      "    - Propose 2-3 next queries and one pivot hint tied to current idea validation (supporting + critical evidence).",
+      "11) Use `empty` only when no paper is selected after both primary and broadened fallback retrieval:",
       `${recordEmptyTemplate}`,
-      "11) After record, call status and include `run_id`/`latest_run_id`.",
-      "12) Response policy based on hypothesis gate:",
+      "12) After record, call status and include `run_id`/`latest_run_id`.",
+      "    - Use status as the single source of truth. Never claim hypothesis persisted unless status.hypothesis_gate.accepted > 0 and status.recent_hypotheses is non-empty.",
+      "13) Response policy based on hypothesis gate:",
       "   - Read `status.knowledge_state_summary.hypothesis_gate.accepted` before final answer.",
       "   - If accepted == 0: output factual cycle report only (papers/read-status/changes/gates). Do NOT output speculative roadmap/high-value-routes/deep-dive suggestions.",
       "   - If accepted > 0: include hypothesis details in the current message by default (stable delivery path).",
@@ -313,6 +363,7 @@ export function buildScheduledTaskMessage(
     `/research-pipeline Run an incremental literature check focused on \"${effectiveTopic}\".`,
     "",
     "Workflow (simple, Markdown-first):",
+    ...languageDirectiveLines,
     "1) Complete 5 steps in this turn: retrieve -> filter -> read -> save metadata -> update knowledge/hypothesis.",
     "2) First call prepare:",
     `${preparePayload}`,
@@ -325,6 +376,7 @@ export function buildScheduledTaskMessage(
     "   - If selected core papers < 3, broaden query and rerun once before returning empty.",
     `5) Reading policy: ${runProfile === "strict" ? "full-text required by default (strict)." : "metadata-only allowed (explicit opt-out detected)."}`,
     "   - Never drop a relevant paper only because full text failed; keep it with full_text_read=false and unread_reason.",
+    "   - Early cycles should prioritize foundational/survey papers; later cycles should shift to mainstream variants and adjacent tracks.",
     "6) User-facing answer MUST be concise Markdown:",
     "   - Selected papers (numbered, title + URL + one-line value)",
     "   - Read status (fulltext vs metadata)",
@@ -332,18 +384,24 @@ export function buildScheduledTaskMessage(
     "   - Knowledge updates (NEW/CONFIRM/REVISE/BRIDGE)",
     "   - Hypothesis decision (generated or not + reason)",
     "   - If trigger signals are present (e.g. NEW>=2, or NEW+REVISE>=2, or BRIDGE present), propose 1 grounded hypothesis with >=2 evidence_ids and dependency_path>=2",
-    "   - Hypothesis must include: strengths>=2, weaknesses>=2, plan_steps>=3, strict_evaluation (overall_score + decision + reason).",
+    "   - Present hypothesis as a research card: gap, mechanism, novelty, falsifiable predictions, assumptions, failure modes, success criteria, executable plan.",
+    "   - Hypothesis must include: problem_gap, proposed_mechanism, novelty_rationale, falsifiable_predictions>=2, critical_assumptions>=2, failure_modes>=1, success_criteria>=2, strengths>=2, weaknesses>=2, plan_steps>=3, strict_evaluation (overall_score + decision + reason).",
     "   - Plan must be executable; when task is predictive/modeling, include at least one lightweight baseline idea (e.g., random forest).",
     "7) Persist once via `scientify_literature_state.record` using MINIMAL JSON only:",
     `${recordTemplate}`,
     "8) Soft-gate default: non-fatal quality gaps should keep status=`ok` and be reported as warnings in quality_gate.",
-    "9) Execute one immediate reflection follow-up when trigger signals exist (BRIDGE, NEW+REVISE, unread core), and write trace/results back into knowledge_state.",
+    "9) Execute one immediate reflection follow-up when trigger signals exist (hypothesis generated, BRIDGE, NEW+REVISE, unread core), and write trace/results back into knowledge_state.",
     "10) Use `degraded_quality` only for fatal gate issues (do not skip record):",
     `${recordDegradedTemplate}`,
-    "11) If both incremental and broadened fallback passes are empty, persist empty:",
+    "11) Before using `empty`, perform empty-cycle diagnosis:",
+    "    - Check whether query/alias/recency is too narrow.",
+    "    - Check whether this sub-direction is likely saturated (few unseen papers across repeated cycles).",
+    "    - Propose 2-3 next queries and one pivot hint tied to current idea validation (supporting + critical evidence).",
+    "12) If both incremental and broadened fallback passes are empty, persist empty:",
     `${recordEmptyTemplate}`,
-    "12) After record, call status and include `run_id`/`latest_run_id` for traceability.",
-    "13) Response policy based on hypothesis gate:",
+    "13) After record, call status and include `run_id`/`latest_run_id` for traceability.",
+    "    - Use status as the single source of truth. Never claim hypothesis persisted unless status.hypothesis_gate.accepted > 0 and status.recent_hypotheses is non-empty.",
+    "14) Response policy based on hypothesis gate:",
     "   - Read `status.knowledge_state_summary.hypothesis_gate.accepted` before final answer.",
     "   - If accepted == 0: output factual cycle report only (papers/read-status/changes/gates). Do NOT output speculative roadmap/high-value-routes/deep-dive suggestions.",
     "   - If accepted > 0: include hypothesis details in the current message by default (stable delivery path).",
@@ -375,6 +433,7 @@ export function formatUsage(): string {
     "- `/research-subscribe daily 08:00 --topic \"LLM alignment\" --max-papers 5 --sources arxiv,openalex`",
     "- `/research-subscribe daily 08:00 --topic \"LLM alignment\" --candidate-pool 12 --score-weights relevance:45,novelty:20,authority:25,actionability:10`",
     "- `/research-subscribe daily 08:00 --topic \"LLM alignment\" --metadata-only`",
+    "- `/research-subscribe daily 09:00 --topic \"LLM alignment\" --language zh`",
     "- `/research-subscribe at 1m --message \"Time to drink coffee.\"`",
     "- `/research-subscribe daily 09:00 --no-deliver`",
   ].join("\n");

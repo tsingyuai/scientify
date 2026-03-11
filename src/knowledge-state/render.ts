@@ -424,10 +424,39 @@ export function renderHypothesisMarkdown(args: {
     "## Statement",
     args.hypothesis.statement,
     "",
+    "## Problem Gap",
+    args.hypothesis.problemGap ?? "pending",
+    "",
+    "## Proposed Mechanism",
+    args.hypothesis.proposedMechanism ?? "pending",
+    "",
+    "## Novelty Rationale",
+    args.hypothesis.noveltyRationale ?? "pending",
+    "",
     "## Dependency Path",
     ...(args.hypothesis.dependencyPath && args.hypothesis.dependencyPath.length > 0
       ? args.hypothesis.dependencyPath.map((step, idx) => `${idx + 1}. ${step}`)
       : ["- Pending enrichment: dependency path not extracted in this run."]),
+    "",
+    "## Falsifiable Predictions",
+    ...(args.hypothesis.falsifiablePredictions && args.hypothesis.falsifiablePredictions.length > 0
+      ? args.hypothesis.falsifiablePredictions.map((item, idx) => `${idx + 1}. ${item}`)
+      : ["1. (none)"]),
+    "",
+    "## Critical Assumptions",
+    ...(args.hypothesis.criticalAssumptions && args.hypothesis.criticalAssumptions.length > 0
+      ? args.hypothesis.criticalAssumptions.map((item, idx) => `${idx + 1}. ${item}`)
+      : ["1. (none)"]),
+    "",
+    "## Failure Modes",
+    ...(args.hypothesis.failureModes && args.hypothesis.failureModes.length > 0
+      ? args.hypothesis.failureModes.map((item, idx) => `${idx + 1}. ${item}`)
+      : ["1. (none)"]),
+    "",
+    "## Success Criteria",
+    ...(args.hypothesis.successCriteria && args.hypothesis.successCriteria.length > 0
+      ? args.hypothesis.successCriteria.map((item, idx) => `${idx + 1}. ${item}`)
+      : ["1. (none)"]),
     "",
     "## Strengths",
     ...(args.hypothesis.strengths && args.hypothesis.strengths.length > 0

@@ -5,6 +5,17 @@ import { isDurationLike, parseScheduleArgs, parseSubscribeOptions } from "./pars
 import { buildScheduledTaskMessage, formatUsage, withSignature } from "./prompt.js";
 import type { CronCommandDeps, CronJob } from "./types.js";
 
+function inferLanguageHint(
+  ctx: PluginCommandContext,
+  explicit?: "zh" | "en" | "auto",
+): "zh" | "en" | undefined {
+  if (explicit === "zh" || explicit === "en") return explicit;
+  const text = `${ctx.commandBody ?? ""} ${ctx.args ?? ""}`.trim();
+  if (/[\p{Script=Han}]/u.test(text)) return "zh";
+  if (ctx.channel === "feishu") return "zh";
+  return undefined;
+}
+
 export function createResearchSubscribeHandler(deps: CronCommandDeps) {
   return async (ctx: PluginCommandContext): Promise<PluginCommandResult> => {
     const options = parseSubscribeOptions(ctx.args);
@@ -60,7 +71,7 @@ export function createResearchSubscribeHandler(deps: CronCommandDeps) {
         "--session",
         "isolated",
         "--message",
-        buildScheduledTaskMessage(options, parsed.kind, stateScopeKey),
+        buildScheduledTaskMessage(options, parsed.kind, stateScopeKey, inferLanguageHint(ctx, options.language)),
         "--timeout-seconds",
         "1800",
         "--thinking",

@@ -43,6 +43,9 @@ Scheduling:
   - If user asks "create/start a research task and run now, then return raw status JSON",
     call \`scientify_cron_job\` with \`action=upsert\` + \`run_now=true\` and return \`status_json\` from tool output.
     Do not emulate this with hand-written JSON.
+  - Treat \`status_json\` as the single source of truth for run result and hypothesis persistence.
+    Never claim "hypothesis generated/persisted" unless \`status_json.knowledge_state_summary.hypothesis_gate.accepted > 0\`
+    and \`status_json.recent_hypotheses\` is non-empty.
 
 Execution truth:
   - Do not claim background progress unless you created a real async handle (job_id/task_id).
@@ -60,10 +63,18 @@ Run profile defaults:
 Research quality and gating:
   - Full-text-first for core evidence papers.
   - If full text unavailable: set full_text_read=false and unread_reason.
+  - Adaptive retrieval intent:
+    * early cycles: prioritize foundational/survey papers to establish field map
+    * later cycles: expand into mainstream variants and adjacent tracks
+    * when a hypothesis appears: immediately run one validation follow-up (supporting + critical evidence), do not wait for next heartbeat
   - In core paper notes, avoid placeholders ("N/A", "not provided", "unknown"); either provide concrete content or omit field.
   - Evidence binding for key conclusions should include section + locator + quote.
   - BRIDGE requires resolvable evidence_ids and at least one full-text-backed evidence source.
   - If BRIDGE, NEW+REVISE, or unread core backlog appears, execute one reflection follow-up query and persist trace/result.
+  - If a cycle is empty, do not stop at "no papers":
+    * diagnose whether it is query/alias/recency mismatch vs scope saturation
+    * persist diagnosis and next-query/pivot hints in run_log notes
+    * keep topic continuity, but prepare adjacent sub-direction queries that serve current idea validation
   - Hypotheses are accepted only when evidence_ids and dependency_path are sufficient; otherwise reject via hypothesis_gate reasons.
   - Before user-facing wording, check latest status.hypothesis_gate.accepted:
     * accepted == 0: factual report only; do not output speculative "next high-value routes"/"deep dive" guidance.
@@ -89,6 +100,19 @@ Do not recursively schedule run_now from within cron.
 Use the existing execution handle and complete prepare -> record -> status directly.
 If workload is too heavy for this turn, prefer sessions_spawn task delegation (with task id) instead of nested cron.`;
 
+const FORCE_ZH_RE =
+  /output language:\s*chinese|chinese \(simplified\)|必须使用中文回复|请用中文|用中文输出|中文回复/iu;
+const FORCE_EN_RE = /output language:\s*english|please use english|use english|英文回复|请用英文/iu;
+
+const LANGUAGE_PROMPT_ZH = `[Language]
+You must reply in Simplified Chinese for all user-facing content.
+If you are about to respond in English, translate to Chinese and output only Chinese.
+`;
+
+const LANGUAGE_PROMPT_EN = `[Language]
+You must reply in English for all user-facing content unless quoting sources.
+`;
+
 /**
  * Injects on every prompt build (survives compaction).
  */
@@ -96,8 +120,16 @@ export function createResearchModeHook() {
   return (_event: HookEvent, context: HookContext): HookResult => {
     const sessionKey = typeof context.sessionKey === "string" ? context.sessionKey : "";
     const inCronContext = sessionKey.includes(":cron:");
+    const promptText = typeof _event.prompt === "string" ? _event.prompt : "";
+    let languagePrefix = "";
+    if (FORCE_EN_RE.test(promptText)) {
+      languagePrefix = LANGUAGE_PROMPT_EN;
+    } else if (FORCE_ZH_RE.test(promptText)) {
+      languagePrefix = LANGUAGE_PROMPT_ZH;
+    }
+    const basePrompt = inCronContext ? `${RESEARCH_MODE_PROMPT}\n${CRON_CONTEXT_GUARD}` : RESEARCH_MODE_PROMPT;
     return {
-      prependContext: inCronContext ? `${RESEARCH_MODE_PROMPT}\n${CRON_CONTEXT_GUARD}` : RESEARCH_MODE_PROMPT,
+      prependContext: languagePrefix ? `${languagePrefix}\n${basePrompt}` : basePrompt,
     };
   };
 }
