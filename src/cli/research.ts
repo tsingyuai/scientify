@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { renderBootstrapMd, renderSoulMd, renderAgentsMd } from "../templates/bootstrap.js";
+import { validateProjectId, ensureWithinDirectory } from "../utils/security.js";
 
 const OPENCLAW_HOME = path.join(os.homedir(), ".openclaw");
 const OPENCLAW_CONFIG = path.join(OPENCLAW_HOME, "openclaw.json");
@@ -141,8 +142,10 @@ function listResearchProjects(): ResearchProject[] {
 }
 
 function initProject(id: string, pluginSkillsDir: string): void {
+  validateProjectId(id);
   const agentId = `research-${id}`;
   const workspace = path.join(OPENCLAW_HOME, `workspace-${agentId}`);
+  ensureWithinDirectory(workspace, OPENCLAW_HOME);
 
   // Check if workspace already exists
   if (fs.existsSync(workspace)) {
@@ -244,8 +247,10 @@ function showStatus(id: string): void {
 }
 
 function deleteProject(id: string): void {
+  validateProjectId(id);
   const agentId = `research-${id}`;
   const workspace = path.join(OPENCLAW_HOME, `workspace-${agentId}`);
+  ensureWithinDirectory(workspace, OPENCLAW_HOME);
 
   // Remove workspace
   if (fs.existsSync(workspace)) {

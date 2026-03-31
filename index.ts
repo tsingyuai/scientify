@@ -10,6 +10,8 @@ import {
 } from "./src/commands.js";
 import { createArxivSearchTool } from "./src/tools/arxiv-search.js";
 import { createOpenAlexSearchTool } from "./src/tools/openalex-search.js";
+import { createPaperDownloadTool } from "./src/tools/paper-download.js";
+import { createPaperBrowserTool } from "./src/tools/paper-browser.js";
 import { createSkillInjectionHook } from "./src/hooks/inject-skill.js";
 import { createCronSkillInjectionHook } from "./src/hooks/cron-skill-inject.js";
 import { registerResearchCli } from "./src/cli/research.js";
@@ -23,6 +25,8 @@ export default definePluginEntry({
     // Register tools
     api.registerTool(createArxivSearchTool());
     api.registerTool(createOpenAlexSearchTool());
+    api.registerTool(createPaperDownloadTool());
+    api.registerTool(createPaperBrowserTool());
 
     // Register chat commands (bypass LLM)
     api.registerCommand({

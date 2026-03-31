@@ -61,7 +61,7 @@ openalex_search({ query: "<term>", max_results: 20 })
 
 #### 2.3 下载论文
 
-按 /paper-download 的方式下载论文到 `papers/`。
+使用 `paper_download` 工具下载论文到 `papers/`。
 
 **完成一个检索词后，再进行下一个。** 这样避免上下文被大量搜索结果污染。
 
@@ -140,5 +140,5 @@ mv "papers/2401.12345" "papers/data-driven/"
 |----------------|---------|
 | `arxiv_search` | 搜索 arXiv 论文 |
 | `openalex_search` | 搜索跨学科论文（覆盖更广） |
-| /paper-download | 下载论文（arXiv .tex/PDF、DOI via Unpaywall） |
+| paper_download | 下载论文（arXiv .tex/PDF、DOI via Unpaywall） |
 | `gh search repos "query"` | 搜索 GitHub 仓库 |
