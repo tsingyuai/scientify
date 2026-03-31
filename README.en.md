@@ -90,7 +90,7 @@ Driven by multi-agent iteration: the orchestrator holds hypotheses and all accum
 │                          │──→│  edit them too               │
 │  arxiv_search            │   └──────────────────────────────┘
 │  openalex_search         │
-│  github_search           │
+│  paper_download          │
 │  paper_browser           │
 │  code_executor           │
 └──────────────────────────┘
@@ -121,7 +121,7 @@ The agents' hands and eyes:
 | Tool | Capability |
 |------|-----------|
 | `arxiv_search` / `openalex_search` | Search academic papers (arXiv + cross-disciplinary) |
-| `github_search` | Search open-source code implementations |
+| `paper_download` | Download papers by arXiv ID (.tex source with PDF fallback) or DOI (open-access PDF via Unpaywall). Input validation prevents shell injection. |
 | `paper_browser` | Paginated paper reading, avoids context overflow |
 | `code_executor` | Execute experiment code in `uv`-isolated environment |
 
@@ -276,7 +276,6 @@ Check status anytime:
 | Skill | Description |
 |-------|-------------|
 | **write-review-paper** | Draft a review/survey paper from project research outputs. |
-| **research-subscription** | Create/list/remove scheduled Scientify jobs via `scientify_cron_job` (research digests or plain reminders). |
 
 </details>
 
@@ -286,14 +285,9 @@ Check status anytime:
 | Tool | Description |
 |------|-------------|
 | `arxiv_search` | Search arXiv papers. Returns metadata (title, authors, abstract, ID). Supports sorting by relevance/date and date filtering. |
-| `arxiv_download` | Batch download papers by arXiv ID. Prefers .tex source files (PDF fallback). |
 | `openalex_search` | Search cross-disciplinary academic papers via OpenAlex API. Returns DOI, authors, citation count, OA status. |
-| `openreview_lookup` | Lookup OpenReview evidence by title/ID/forum. Returns decision, review rating/confidence aggregates, and review summaries. |
-| `unpaywall_download` | Download open access PDFs by DOI via Unpaywall API. Non-OA papers are silently skipped. |
-| `github_search` | Search GitHub repositories. Returns repo name, description, stars, URL. Supports language filtering and sorting. |
+| `paper_download` | Download papers by arXiv ID (prefers .tex source, PDF fallback) or DOI (open-access PDF via Unpaywall). Validates all identifiers to prevent injection. Max 20 papers per call with rate limiting. |
 | `paper_browser` | Paginated browsing of large paper files (.tex/.md) to avoid context overflow. |
-| `scientify_cron_job` | Manage scheduled Scientify jobs (`upsert`/`list`/`remove`). |
-| `scientify_literature_state` | Persistent incremental state for subscriptions: dedupe, record, feedback, and status inspection. |
 
 </details>
 
@@ -308,9 +302,6 @@ Check status anytime:
 | `/projects` | List all projects |
 | `/project-switch <id>` | Switch active project |
 | `/project-delete <id>` | Delete a project |
-| `/research-subscribe ...` | Create/update scheduled Scientify jobs |
-| `/research-subscriptions` | Show your scheduled Scientify jobs |
-| `/research-unsubscribe [job-id]` | Remove your scheduled Scientify jobs |
 
 </details>
 

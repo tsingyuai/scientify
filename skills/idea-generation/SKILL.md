@@ -90,7 +90,7 @@ arxiv_search({ query: "{user_topic}", max_results: 10 })
 openalex_search({ query: "{user_topic}", max_results: 10 })
 ```
 
-2. **Download papers:** 按 /paper-download 的方式下载到 `papers/`
+2. **Download papers:** 使用 `paper_download` 工具下载到 `papers/`
 
 3. **Clone reference repos (optional):**
 ```bash

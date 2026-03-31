@@ -96,7 +96,7 @@ openalex_search({
 
 合并结果，按 arXiv ID / DOI 去重，**跳过 `processed_ids` 中已有的论文**。
 
-按 /paper-download 的方式下载新论文到 `papers/`（arXiv 优先 .tex 源文件，DOI 通过 Unpaywall 获取 OA PDF）。
+使用 `paper_download` 工具下载新论文到 `papers/`（arXiv 优先 .tex 源文件，DOI 通过 Unpaywall 获取 OA PDF）。
 
 ### Step 2: Read（阅读）
 

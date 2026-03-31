@@ -90,7 +90,7 @@ Scientify 采用**新陈代谢模式**——持续地摄入、消化、沉淀、
 │                          │──→│                              │
 │  arxiv_search            │   └──────────────────────────────┘
 │  openalex_search         │
-│  github_search           │
+│  paper_download          │
 │  paper_browser           │
 │  code_executor           │
 └──────────────────────────┘
@@ -121,7 +121,7 @@ Agent 的手和眼：
 | 工具 | 能力 |
 |------|------|
 | `arxiv_search` / `openalex_search` | 搜索学术论文（arXiv + 跨学科） |
-| `github_search` | 搜索开源代码实现 |
+| `paper_download` | 下载论文：arXiv ID（优先 .tex 源文件，PDF 兜底）或 DOI（通过 Unpaywall 获取 OA PDF）。内置输入校验防止注入攻击。 |
 | `paper_browser` | 分页精读论文，避免上下文溢出 |
 | `code_executor` | 在 `uv` 隔离环境中执行实验代码 |
 

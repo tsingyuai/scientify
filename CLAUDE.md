@@ -7,7 +7,8 @@
 Scientify 是一个 OpenClaw 插件，提供 AI 驱动的科研工作流自动化功能。
 
 **核心组件：**
-- `src/tools/` - 工具实现（arxiv_search, arxiv_download, openalex_search, unpaywall_download, github_search, paper_browser）
+- `src/tools/` - 工具实现（arxiv_search, openalex_search, paper_download, paper_browser）
+- `src/utils/` - 通用工具（security.ts 输入校验）
 - `src/commands.ts` - 聊天命令处理
 - `skills/` - 技能定义（随 npm 包发布）
 - `index.ts` - 插件入口
@@ -119,19 +120,30 @@ scientify/
 ├── README.zh.md             # 中文文档
 ├── src/
 │   ├── commands.ts          # 聊天命令
-│   ├── openclaw.d.ts        # 类型声明
+│   ├── types.ts             # 类型定义
+│   ├── cli/
+│   │   └── research.ts      # CLI 入口（init/delete/list 项目）
+│   ├── commands/
+│   │   └── metabolism-status.ts  # 新陈代谢状态命令
+│   ├── hooks/
+│   │   ├── inject-skill.ts       # Skill 注入 hook
+│   │   └── cron-skill-inject.ts  # Cron skill 注入 hook
+│   ├── templates/
+│   │   └── bootstrap.ts     # 项目初始化模板
+│   ├── utils/
+│   │   └── security.ts      # 输入校验（路径遍历防护、ID 格式校验）
 │   └── tools/
 │       ├── arxiv-search.ts         # ArXiv 搜索工具
-│       ├── arxiv-download.ts       # ArXiv 下载工具（含速率限制）
 │       ├── openalex-search.ts      # OpenAlex 跨学科搜索
-│       ├── unpaywall-download.ts   # Unpaywall OA PDF 下载
-│       ├── github-search-tool.ts   # GitHub 搜索工具
-│       └── paper-browser.ts        # 论文分页浏览工具
+│       ├── paper-download.ts       # 论文下载（arXiv .tex/PDF + DOI via Unpaywall）
+│       ├── paper-browser.ts        # 论文分页浏览工具
+│       └── result.ts               # 工具结果辅助函数
 ├── skills/
 │   ├── idea-generation/
 │   │   ├── SKILL.md
 │   │   └── references/idea-template.md
-│   ├── research-collect/SKILL.md  # 文献搜索 → 筛选 → 下载 → 聚类
+│   ├── metabolism/SKILL.md         # 新陈代谢循环（Day 0 + Day 1+）
+│   ├── research-collect/SKILL.md   # 文献搜索 → 筛选 → 下载 → 聚类
 │   ├── research-pipeline/SKILL.md  # 编排器，通过 sessions_spawn 调度以下 5 个 skill
 │   ├── research-survey/SKILL.md    # 深度论文分析 + 方法对比
 │   ├── research-plan/SKILL.md      # 四部分实现计划
