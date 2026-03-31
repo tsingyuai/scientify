@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import type { PluginCommandContext, PluginCommandResult } from "./types.js";
+import { ensureWithinDirectory } from "./utils/security.js";
 
 const OPENCLAW_HOME = path.join(os.homedir(), ".openclaw");
 
@@ -20,10 +21,11 @@ function listResearchAgents(): ResearchAgent[] {
     const agents = (config.agents as { list?: Array<{ id: string; workspace?: string }> })?.list ?? [];
     return agents
       .filter((a) => a.id.startsWith("research-"))
-      .map((a) => ({
-        id: a.id,
-        workspace: (a.workspace ?? `~/.openclaw/workspace-${a.id}`).replace("~", os.homedir()),
-      }));
+      .map((a) => {
+        const workspace = (a.workspace ?? `~/.openclaw/workspace-${a.id}`).replace("~", os.homedir());
+        ensureWithinDirectory(workspace, OPENCLAW_HOME);
+        return { id: a.id, workspace };
+      });
   } catch {
     return [];
   }
