@@ -1,5 +1,5 @@
 import path from "node:path";
-import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import {
   handleResearchStatus,
   handlePapers,
@@ -15,11 +15,11 @@ import { createCronSkillInjectionHook } from "./src/hooks/cron-skill-inject.js";
 import { registerResearchCli } from "./src/cli/research.js";
 import { handleMetabolismStatus } from "./src/commands/metabolism-status.js";
 
-export default definePluginEntry({
+const scientifyPlugin = {
   id: "scientify",
   name: "Scientify",
   description: "Continuous AI research workflow for survey, planning, implementation, review, experimentation, and writing",
-  register(api) {
+  register(api: OpenClawPluginApi) {
     // Register tools
     api.registerTool(createArxivSearchTool());
     api.registerTool(createOpenAlexSearchTool());
@@ -93,4 +93,6 @@ export default definePluginEntry({
 
     api.logger.info("Scientify plugin loaded");
   },
-});
+};
+
+export default scientifyPlugin;

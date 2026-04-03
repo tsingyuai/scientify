@@ -1,32 +1,34 @@
-import { Type } from "@sinclair/typebox";
 import { Result } from "./result.js";
 
 const OPENALEX_API = "https://api.openalex.org/works";
 const DEFAULT_MAX_RESULTS = 15;
 const MAX_RESULTS_LIMIT = 50;
 
-export const OpenAlexSearchToolSchema = Type.Object({
-  query: Type.String({
-    description: "Search query for academic works (papers, articles). Can search by title, abstract, author, or keywords.",
-  }),
-  max_results: Type.Optional(
-    Type.Number({
+export const OpenAlexSearchToolSchema = {
+  type: "object",
+  properties: {
+    query: {
+      type: "string",
+      description: "Search query for academic works (papers, articles). Can search by title, abstract, author, or keywords.",
+    },
+    max_results: {
+      type: "number",
       description: "Maximum number of results (1-50). Default: 15.",
       minimum: 1,
       maximum: MAX_RESULTS_LIMIT,
-    }),
-  ),
-  filter: Type.Optional(
-    Type.String({
+    },
+    filter: {
+      type: "string",
       description: 'Optional filter string (e.g., "publication_year:2020-2024", "type:journal-article", "is_oa:true"). See OpenAlex docs for filter syntax.',
-    }),
-  ),
-  sort: Type.Optional(
-    Type.String({
+    },
+    sort: {
+      type: "string",
       description: 'Sort by: "cited_by_count" (most cited), "publication_date" (newest first), or "relevance_score" (default).',
-    }),
-  ),
-});
+    },
+  },
+  required: ["query"],
+  additionalProperties: false,
+} as const;
 
 type OpenAlexWork = {
   id: string;

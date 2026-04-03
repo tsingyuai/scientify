@@ -1,4 +1,3 @@
-import { Type } from "@sinclair/typebox";
 import { Result } from "./result.js";
 
 const ARXIV_API_URL = "https://export.arxiv.org/api/query";
@@ -6,26 +5,31 @@ const DEFAULT_MAX_RESULTS = 10;
 const MAX_RESULTS_LIMIT = 50;
 const ABSTRACT_MAX_CHARS = 300;
 
-export const ArxivSearchSchema = Type.Object({
-  query: Type.String({ description: "Search query for arXiv papers (e.g. 'graph neural network')." }),
-  max_results: Type.Optional(
-    Type.Number({
+export const ArxivSearchSchema = {
+  type: "object",
+  properties: {
+    query: {
+      type: "string",
+      description: "Search query for arXiv papers (e.g. 'graph neural network').",
+    },
+    max_results: {
+      type: "number",
       description: "Maximum number of results to return (1-50). Default: 10.",
       minimum: 1,
       maximum: MAX_RESULTS_LIMIT,
-    }),
-  ),
-  sort_by: Type.Optional(
-    Type.String({
+    },
+    sort_by: {
+      type: "string",
       description: 'Sort order: "relevance" (default), "lastUpdatedDate", or "submittedDate".',
-    }),
-  ),
-  date_from: Type.Optional(
-    Type.String({
+    },
+    date_from: {
+      type: "string",
       description: "Filter papers submitted after this date (YYYY-MM-DD).",
-    }),
-  ),
-});
+    },
+  },
+  required: ["query"],
+  additionalProperties: false,
+} as const;
 
 type ArxivPaper = {
   title: string;
