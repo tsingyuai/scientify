@@ -1,16 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 220" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', Helvetica, Arial, sans-serif">
   <style>
     .title    { font-size: 18px; font-weight: 600; fill: #0f172a; }
-    .subtitle { font-size: 12px; fill: #64748b; }
-    .label    { font-size: 12px; fill: #64748b; }
+    .subtitle { font-size: 12px; fill: #475569; }
+    .label    { font-size: 12px; fill: #334155; }
     .value    { font-size: 42px; font-weight: 700; fill: #2563eb; }
-    .vs       { font-size: 11px; fill: #94a3b8; }
+    .vs       { font-size: 11px; fill: #64748b; }
     .bar-bg   { fill: #e2e8f0; }
     .bar-fg   { fill: #2563eb; }
     @media (prefers-color-scheme: dark) {
       .title    { fill: #f1f5f9; }
-      .subtitle { fill: #94a3b8; }
-      .label    { fill: #cbd5e1; }
+      .subtitle { fill: #cbd5e1; }
+      .label    { fill: #e2e8f0; }
       .value    { fill: #60a5fa; }
       .vs       { fill: #94a3b8; }
       .bar-bg   { fill: #334155; }
