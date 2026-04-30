@@ -68,3 +68,32 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to ClawHub
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+        run: |
+          NEW_TAG=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          if [[ -z "$NEW_TAG" ]]; then
+            echo "No new release tag at HEAD — semantic-release did not cut a release. Skipping ClawHub publish."
+            exit 0
+          fi
+          if [[ -z "$CLAWHUB_TOKEN" ]]; then
+            echo "::error::CLAWHUB_TOKEN secret is missing."
+            exit 1
+          fi
+
+          echo "Cutting ClawHub release for $NEW_TAG"
+          npm i -g clawhub@latest
+
+          mkdir -p "$RUNNER_TEMP/clawhub"
+          jq -n --arg token "$CLAWHUB_TOKEN" \
+            '{registry:"https://clawhub.ai", token:$token}' \
+            > "$RUNNER_TEMP/clawhub/config.json"
+          export CLAWHUB_CONFIG_PATH="$RUNNER_TEMP/clawhub/config.json"
+
+          # dist/ already built; skills/ and openclaw.plugin.json are committed.
+          clawhub package publish ./ \
+            --source-ref "refs/tags/$NEW_TAG" \
+            --manual-override-reason "GitHub Actions push publish via CLAWHUB_TOKEN" \
+            --json
