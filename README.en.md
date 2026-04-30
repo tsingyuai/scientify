@@ -42,6 +42,23 @@ The longer you use it, the deeper its research goes.
   <sub>Scientify proactively pushes latest findings to researchers via Feishu, with insights drawn from its knowledge base</sub>
 </p>
 
+#### How big is the advantage? We ran a controlled study.
+
+Metabolism is not just an engineering choice — it produces qualitatively different research. We compared metabolism mode against the conventional batch paradigm on **50 research topics, 892 generated hypotheses**. Paper: [arXiv:2604.12243](https://arxiv.org/abs/2604.12243).
+
+<p align="center">
+  <img src="docs/assets/showcase/metabolism-vs-batch.en.svg" width="100%" alt="Metabolism vs Batch: key metrics from a controlled study on 50 topics and 892 hypotheses">
+</p>
+
+| Metric | Batch baseline | Metabolism | Difference |
+|--------|----------------|------------|------------|
+| Hit Rate — fraction of hypotheses validated by later papers | 3.0% | **5.8%** | **1.9× (nearly doubled)** |
+| Useful hypotheses per topic | 13.7 | **17.3** | **+26%** |
+| LLM-judged novelty (1–10 scale) | 6.39 | **6.82** | **+0.43** |
+| Token cost per hypothesis | 434K | **30K** | **−92%** |
+
+> 📄 Read the full paper: [Continuous Knowledge Metabolism: Generating Scientific Hypotheses from Evolving Literature](https://arxiv.org/abs/2604.12243)
+
 ### 2. End-to-End Autonomous Research: Achieving SOTA-Level Results
 
 Give it a research topic, and it completes the entire study — producing new algorithms that outperform existing literature.

@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 220" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <style>
+    .title    { font-size: 18px; font-weight: 600; fill: #0f172a; }
+    .subtitle { font-size: 12px; fill: #64748b; }
+    .label    { font-size: 12px; fill: #64748b; }
+    .value    { font-size: 42px; font-weight: 700; fill: #2563eb; }
+    .vs       { font-size: 11px; fill: #94a3b8; }
+    .bar-bg   { fill: #e2e8f0; }
+    .bar-fg   { fill: #2563eb; }
+    @media (prefers-color-scheme: dark) {
+      .title    { fill: #f1f5f9; }
+      .subtitle { fill: #94a3b8; }
+      .label    { fill: #cbd5e1; }
+      .value    { fill: #60a5fa; }
+      .vs       { fill: #94a3b8; }
+      .bar-bg   { fill: #334155; }
+      .bar-fg   { fill: #60a5fa; }
+    }
+  </style>
+
+  <text x="480" y="34" text-anchor="middle" class="title">Metabolism vs Batch — Controlled Study</text>
+  <text x="480" y="54" text-anchor="middle" class="subtitle">50 topics · 892 hypotheses · arXiv:2604.12243</text>
+
+  <!-- Tile 1: Hit Rate -->
+  <g transform="translate(0, 100)">
+    <text x="120" y="0"  text-anchor="middle" class="label">Hit Rate (validated by future work)</text>
+    <text x="120" y="58" text-anchor="middle" class="value">1.9×</text>
+    <text x="120" y="80" text-anchor="middle" class="vs">5.8% vs 3.0%</text>
+    <rect x="30"  y="98" width="180" height="6" rx="3" class="bar-bg"/>
+    <rect x="30"  y="98" width="173" height="6" rx="3" class="bar-fg"/>
+  </g>
+
+  <!-- Tile 2: Yield -->
+  <g transform="translate(240, 100)">
+    <text x="120" y="0"  text-anchor="middle" class="label">Useful Hypotheses / Topic</text>
+    <text x="120" y="58" text-anchor="middle" class="value">+26%</text>
+    <text x="120" y="80" text-anchor="middle" class="vs">17.3 vs 13.7</text>
+    <rect x="30"  y="98" width="180" height="6" rx="3" class="bar-bg"/>
+    <rect x="30"  y="98" width="108" height="6" rx="3" class="bar-fg"/>
+  </g>
+
+  <!-- Tile 3: Novelty -->
+  <g transform="translate(480, 100)">
+    <text x="120" y="0"  text-anchor="middle" class="label">LLM Novelty (1–10 scale)</text>
+    <text x="120" y="58" text-anchor="middle" class="value">6.82</text>
+    <text x="120" y="80" text-anchor="middle" class="vs">vs 6.39 baseline</text>
+    <rect x="30"  y="98" width="180" height="6" rx="3" class="bar-bg"/>
+    <rect x="30"  y="98" width="123" height="6" rx="3" class="bar-fg"/>
+  </g>
+
+  <!-- Tile 4: Token Cost -->
+  <g transform="translate(720, 100)">
+    <text x="120" y="0"  text-anchor="middle" class="label">Token Cost / Hypothesis</text>
+    <text x="120" y="58" text-anchor="middle" class="value">−92%</text>
+    <text x="120" y="80" text-anchor="middle" class="vs">30K vs 434K tokens</text>
+    <rect x="30"  y="98" width="180" height="6" rx="3" class="bar-bg"/>
+    <rect x="30"  y="98" width="166" height="6" rx="3" class="bar-fg"/>
+  </g>
+</svg>
