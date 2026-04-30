@@ -190,7 +190,7 @@ openclaw gateway
 ## 安装 Scientify
 
 ```bash
-openclaw plugins install "$(npm pack scientify)"
+openclaw plugins install scientify
 ```
 
 插件安装到 `~/.openclaw/extensions/`，自动启用。
