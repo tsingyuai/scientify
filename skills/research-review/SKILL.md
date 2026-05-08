@@ -319,6 +319,10 @@ metadata:
 
 ---
 
+## Follow-on Skills
+
+- Use `/repro-check` after a PASS verdict when the team needs a dedicated reproducibility review before sharing results or writing strong claims.
+
 ## Rules
 
 ### 审查标准

@@ -25,10 +25,15 @@ You were just created as the research agent for project "${projectName}". Comple
    - existing papers/ -> /research-survey
    - existing survey_res.md, but route still undecided -> /algorithm-selection
    - existing survey_res.md -> /research-plan
+   - existing plan_res.md, and metric definitions or evidence layers still look unclear -> /metric-audit
    - existing plan_res.md, but data quality still needs review -> /dataset-validate
+   - existing plan_res.md, and the project needs a decisive component-level validation plan -> /ablation-planner
    - existing plan_res.md, and matched baseline evidence is needed -> /baseline-runner
+   - multiple runs or configs already exist, but the registry is still messy -> /experiment-tracker
    - existing implementation code -> /research-review
+   - existing review PASS, and reproducibility needs to be checked before sharing -> /repro-check
    - existing review PASS -> /research-experiment
+   - existing experiment_res.md, but failure modes are still unclear -> /error-analysis
    - existing experiment_res.md plus figures -> /write-paper
    - existing paper/draft.md -> /artifact-review
    - existing figures with inconsistent captions or style -> /figure-standardize
@@ -40,9 +45,14 @@ You were just created as the research agent for project "${projectName}". Comple
 - I only have a research direction and no materials yet -> finish setup, then run /metabolism
 - I already have a batch of papers -> run /research-survey
 - I finished the survey but have not chosen a model route -> run /algorithm-selection
+- I have a plan but the metric and evidence contract still feels unclear -> run /metric-audit
 - I already have a plan and want to validate the data first -> run /dataset-validate
+- I already have a plan and need a small, decisive ablation set -> run /ablation-planner
 - I already have a plan and want honest baseline numbers first -> run /baseline-runner
+- I already have several runs and want one clean registry -> run /experiment-tracker
 - I already have implementation code -> run /research-review
+- I already passed review and want to check reproducibility before sharing -> run /repro-check
+- I already have experiment results but need structured failure analysis -> run /error-analysis
 - I already have experiment results and figures -> run /write-paper
 - I already have a draft that needs review -> run /artifact-review
 
@@ -173,11 +183,16 @@ Do not modify output files once written unless the user explicitly asks you to. 
 | /research-survey | knowledge/, survey_res.md |
 | /algorithm-selection | selection_res.md |
 | /research-plan | plan_res.md |
+| /metric-audit | metric_audit.md |
 | /dataset-validate | data_validation.md |
+| /ablation-planner | ablation_plan.md |
 | /baseline-runner | baseline_res.md, experiments/baselines/ |
 | /research-implement | experiments/ |
 | /research-review | experiments/review/ |
+| /repro-check | repro_check.md |
 | /research-experiment | experiments/results/, experiment_res.md |
+| /experiment-tracker | experiment_registry.md |
+| /error-analysis | error_analysis.md |
 | /idea-generation | ideas/ |
 | /write-review-paper | review/ |
 | /write-paper | paper/claim_inventory.md, paper/figures_manifest.md, paper/draft.md, paper/manuscript.tex, paper/build/manuscript.pdf |
@@ -190,12 +205,27 @@ Do not modify output files once written unless the user explicitly asks you to. 
 - Survey exists but route choice is still unclear:
   - run \`/algorithm-selection\`
   - expected output: \`selection_res.md\`
+- Plan exists and metric wording, baselines, or evidence layers need review:
+  - run \`/metric-audit\`
+  - expected output: \`metric_audit.md\`
 - Plan exists and the project needs a dedicated data-quality check:
   - run \`/dataset-validate\`
   - expected output: \`data_validation.md\`
+- Plan exists and the project needs a concise component-level ablation set:
+  - run \`/ablation-planner\`
+  - expected output: \`ablation_plan.md\`
 - Plan exists and the project needs honest comparison numbers:
   - run \`/baseline-runner\`
   - expected outputs: \`baseline_res.md\`, optional baseline artifacts under \`experiments/baselines/\`
+- Several runs already exist and the project needs a clean ledger:
+  - run \`/experiment-tracker\`
+  - expected output: \`experiment_registry.md\`
+- Review already passed and the team needs reproducibility confidence before sharing:
+  - run \`/repro-check\`
+  - expected output: \`repro_check.md\`
+- Experiment results exist but failure buckets are still unclear:
+  - run \`/error-analysis\`
+  - expected output: \`error_analysis.md\`
 
 ## Writing and Release Entry Points
 

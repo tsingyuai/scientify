@@ -186,3 +186,9 @@ python3 run.py --experiment {exp_name}
 5. **补充实验迭代必须做 2 轮（Novix Exp Analyzer 机制）** — 第 1 轮针对初始结果，第 2 轮针对补充实验结果
 6. 补充实验不改核心算法，只改实验配置/参数/可视化代码
 7. Every headline metric must include a baseline, and every main conclusion must point back to real outputs or figure files
+
+## Follow-on Skills
+
+- Use `/experiment-tracker` when multiple runs or config branches need one clean registry.
+- Use `/error-analysis` after this skill when aggregate metrics exist but failure buckets are still unclear.
+- Use `/metric-audit` after this skill when headline numbers, baselines, or evidence boundaries need a dedicated consistency review.

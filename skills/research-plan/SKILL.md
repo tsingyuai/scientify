@@ -129,3 +129,8 @@ metadata:
 2. 不要写"通用"计划 — 每个参数都要有具体值或合理估计
 3. 如果参考仓库存在，组件表必须包含参考代码路径
 4. plan_res.md 的完成标志：四个部分都存在且非空
+
+## Follow-on Skills
+
+- Use `/metric-audit` after this skill when metric wording, baselines, guardrails, or evidence layers still need a dedicated review.
+- Use `/ablation-planner` after this skill when the project needs a focused component-level validation plan before full experiments.

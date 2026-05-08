@@ -9,6 +9,11 @@
   },
   "skills": [
     "skills/algorithm-selection",
+    "skills/metric-audit",
+    "skills/error-analysis",
+    "skills/repro-check",
+    "skills/experiment-tracker",
+    "skills/ablation-planner",
     "skills/baseline-runner",
     "skills/dataset-validate",
     "skills/idea-generation",
