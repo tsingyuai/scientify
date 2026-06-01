@@ -31,6 +31,18 @@ metadata:
 |------|---------|
 | `plan_res.md` | 四部分实现计划 |
 
+## Project Shape Flexibility
+
+The default four-part plan is optimized for ML projects, but Scientify also supports non-ML research projects. Keep the same `plan_res.md` output and the same level of specificity, but rename the four sections when the project shape demands it.
+
+Use these equivalents when appropriate:
+
+- ML / benchmark project: `Dataset Plan`, `Model Plan`, `Training Plan`, `Testing Plan`
+- theory / numerics project: `Input / Parameter Plan`, `Model / Formula Plan`, `Numerical Execution Plan`, `Testing / Review Plan`
+- literature / review project: `Corpus Plan`, `Reading / Extraction Plan`, `Synthesis Plan`, `Validation / Citation Audit Plan`
+
+Do not force a fake dataset, training loop, or model architecture into a non-ML project. Preserve concrete inputs, formulas, execution commands, baselines, and validation checks instead.
+
 ---
 
 ## Workflow
@@ -129,3 +141,4 @@ metadata:
 2. 不要写"通用"计划 — 每个参数都要有具体值或合理估计
 3. 如果参考仓库存在，组件表必须包含参考代码路径
 4. plan_res.md 的完成标志：四个部分都存在且非空
+5. 非 ML 项目可以使用领域等价的四部分结构，但不得降低可执行性、证据追溯或验证要求

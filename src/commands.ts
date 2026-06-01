@@ -11,7 +11,7 @@ interface ResearchAgent {
   workspace: string;
 }
 
-interface ProjectSnapshot {
+export interface ProjectSnapshot {
   hasConfig: boolean;
   hasSurvey: boolean;
   hasSelection: boolean;
@@ -21,9 +21,11 @@ interface ProjectSnapshot {
   hasImplementationReport: boolean;
   latestReviewVerdict: "PASS" | "NEEDS_REVISION" | "NEEDS_ALGORITHM_REVIEW" | "BLOCKED" | "MISSING" | "UNKNOWN";
   hasExperiment: boolean;
+  hasPaper: boolean;
+  hasArtifactReview: boolean;
 }
 
-interface NextActionState {
+export interface NextActionState {
   stage: string;
   command: string;
   expectedOutputs: string[];
@@ -49,7 +51,7 @@ function listResearchAgents(): ResearchAgent[] {
   }
 }
 
-function countFiles(dirPath: string, filter?: (name: string) => boolean): number {
+export function countFiles(dirPath: string, filter?: (name: string) => boolean): number {
   try {
     const entries = fs.readdirSync(dirPath);
     return filter ? entries.filter(filter).length : entries.length;
@@ -64,6 +66,23 @@ function fileExists(filePath: string): boolean {
   } catch {
     return false;
   }
+}
+
+function hasAnyFile(workspace: string, paths: string[]): boolean {
+  return paths.some((p) => fileExists(path.join(workspace, p)));
+}
+
+function hasCompletedPaperArtifact(workspace: string): boolean {
+  return hasAnyFile(workspace, [
+    "paper/draft.md",
+    "paper/manuscript.tex",
+    "paper/build/manuscript.pdf",
+  ]);
+}
+
+function hasCompletedArtifactReview(workspace: string): boolean {
+  const gateStatus = readReleaseGateStatus(workspace);
+  return gateStatus.state === "fresh" && gateStatus.verdict !== "HOLD";
 }
 
 function readLatestReviewVerdict(workspace: string): ProjectSnapshot["latestReviewVerdict"] {
@@ -91,7 +110,7 @@ function readLatestReviewVerdict(workspace: string): ProjectSnapshot["latestRevi
   }
 }
 
-function buildProjectSnapshot(workspace: string): ProjectSnapshot {
+export function buildProjectSnapshot(workspace: string): ProjectSnapshot {
   return {
     hasConfig: fileExists(path.join(workspace, "config.json")),
     hasSurvey: fileExists(path.join(workspace, "survey_res.md")),
@@ -102,10 +121,12 @@ function buildProjectSnapshot(workspace: string): ProjectSnapshot {
     hasImplementationReport: fileExists(path.join(workspace, "ml_res.md")),
     latestReviewVerdict: readLatestReviewVerdict(workspace),
     hasExperiment: fileExists(path.join(workspace, "experiment_res.md")),
+    hasPaper: hasCompletedPaperArtifact(workspace),
+    hasArtifactReview: hasCompletedArtifactReview(workspace),
   };
 }
 
-function inferNextAction(snapshot: ProjectSnapshot): NextActionState {
+export function inferNextAction(snapshot: ProjectSnapshot): NextActionState {
   if (!snapshot.hasConfig) {
     return {
       stage: "Bootstrap pending",
@@ -187,15 +208,33 @@ function inferNextAction(snapshot: ProjectSnapshot): NextActionState {
     };
   }
 
+  if (!snapshot.hasPaper) {
+    return {
+      stage: "Paper drafting",
+      command: "/write-paper",
+      expectedOutputs: ["paper/claim_inventory.md", "paper/figures_manifest.md", "paper/draft.md", "paper/manuscript.tex"],
+      reason: "The evidence chain has experiment results, but no paper-facing claim inventory, figure manifest, or draft has been detected yet.",
+    };
+  }
+
+  if (!snapshot.hasArtifactReview) {
+    return {
+      stage: "Artifact review",
+      command: "/artifact-review",
+      expectedOutputs: ["review/artifact_review.md", "review/release_checklist.md", "review/release_gate.json"],
+      reason: "Paper or release-facing artifacts exist, but they have not yet passed the release-readiness review gate.",
+    };
+  }
+
   return {
-    stage: "Experiment complete",
-    command: "/write-review-paper",
-    expectedOutputs: ["review/"],
-    reason: "The core ML execution chain is complete, so the project can move into synthesis, survey writing, or outward-facing summaries.",
+    stage: "Ready for release layout",
+    command: "/release-layout",
+    expectedOutputs: ["README.md or docs/index.html updates"],
+    reason: "Core research, paper-facing artifacts, and artifact review exist, so the next step is clearer external packaging if needed.",
   };
 }
 
-function formatArtifactPresence(snapshot: ProjectSnapshot): string {
+export function formatArtifactPresence(snapshot: ProjectSnapshot): string {
   const items = [
     ["survey", snapshot.hasSurvey],
     ["selection", snapshot.hasSelection],
@@ -205,6 +244,8 @@ function formatArtifactPresence(snapshot: ProjectSnapshot): string {
     ["implement", snapshot.hasImplementationReport],
     ["review", snapshot.latestReviewVerdict === "PASS"],
     ["experiment", snapshot.hasExperiment],
+    ["paper", snapshot.hasPaper],
+    ["artifact_review", snapshot.hasArtifactReview],
   ];
 
   return items.map(([label, ok]) => `${ok ? "yes" : "no"} ${label}`).join(" | ");

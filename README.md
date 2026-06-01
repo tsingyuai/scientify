@@ -107,9 +107,8 @@ Scientify 采用**新陈代谢模式**——持续地摄入、消化、沉淀、
 │                          │──→│                              │
 │  arxiv_search            │   └──────────────────────────────┘
 │  openalex_search         │
-│  github_search           │
-│  paper_browser           │
-│  code_executor           │
+│  平台能力 / 本地命令      │
+│  / skill 执行步骤        │
 └──────────────────────────┘
 ```
 
@@ -133,14 +132,25 @@ Pipeline 内部是多 Agent 迭代：编排器持有假设，spawn 子 agent 执
 
 ### 工具层
 
-Agent 的手和眼：
+Scientify 将研究能力组织为统一的能力语义层，并分别落在运行时注册面与工作流执行面中：
 
-| 工具 | 能力 |
-|------|------|
-| `arxiv_search` / `openalex_search` | 搜索学术论文（arXiv + 跨学科） |
-| `github_search` | 搜索开源代码实现 |
-| `paper_browser` | 分页精读论文，避免上下文溢出 |
-| `code_executor` | 在 `uv` 隔离环境中执行实验代码 |
+| 能力语义 | 主要载体 | 典型对象 | 执行路径 | 典型产物 |
+|---------|----------|----------|----------|----------|
+| `arxiv_search` 类能力 | 运行时注册 tool | arXiv 论文元数据、候选论文集合 | 由插件入口注册，并通过标准 tool call 调用 | 检索结果、候选论文列表、survey 输入 |
+| `openalex_search` 类能力 | 运行时注册 tool | 跨学科论文元数据、DOI、引用与 OA 信息 | 由插件入口注册，并通过标准 tool call 调用 | 检索结果、补充文献来源、survey 输入 |
+| `github_search` 类能力 | 工作流执行步骤 | 开源实现、baseline 仓库、复现线索 | 由 OpenClaw 平台能力、本地环境命令或 skill 内步骤来完成 | `survey_res.md`、实现参考、仓库链接 |
+| `paper_browser` 类能力 | 工作流执行步骤 | `.md`、`.tex`、长论文文本、草稿 | 由 OpenClaw 平台能力、本地环境命令或 skill 内步骤来完成 | 分段阅读结果、局部摘录、结构化笔记 |
+| `code_executor` 类能力 | 工作流执行步骤 | 工作区中的训练、评测、脚本与实验运行 | 由 OpenClaw 平台能力、本地环境命令或 skill 内步骤来完成 | 运行日志、验证结果、实验产物 |
+| `arxiv_download` 类能力 | 工作流执行步骤 | arXiv source / PDF 获取 | 由 OpenClaw 平台能力、本地环境命令或 skill 内步骤来完成 | `papers/` 下的论文文件 |
+| `openreview_lookup` 类能力 | 工作流执行步骤 | review、decision、forum 上下文 | 由 OpenClaw 平台能力、本地环境命令或 skill 内步骤来完成 | 评审证据、对比说明、review notes |
+| `unpaywall_download` 类能力 | 工作流执行步骤 | DOI 对应的 OA PDF 获取 | 由 OpenClaw 平台能力、本地环境命令或 skill 内步骤来完成 | 下载后的 PDF、来源记录 |
+
+从实现边界看：
+- `tool registry` 提供稳定、命名、可直接调用的运行时接口
+- `skill` 负责编排研究阶段中的执行顺序、输入输出契约与产物落盘
+- 文件读取、命令执行、下载与外部站点交互由 OpenClaw 平台能力、本地环境命令或 skill 内步骤来完成
+
+当前能力地图见 [docs/current-capability-map.md](./docs/current-capability-map.md)；历史 tool 考据见 [docs/historical-tools.md](./docs/historical-tools.md)。
 
 > Scientify 运行在 [OpenClaw](https://github.com/openclaw/openclaw) 之上，天然可调用平台的 MCP 服务器（Slack / 飞书推送）、浏览器自动化（付费文献下载）、多会话并发（多方向并行研究）等能力。
 

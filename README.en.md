@@ -107,9 +107,8 @@ Driven by multi-agent iteration: the orchestrator holds hypotheses and all accum
 │                          │──→│  edit them too               │
 │  arxiv_search            │   └──────────────────────────────┘
 │  openalex_search         │
-│  github_search           │
-│  paper_browser           │
-│  code_executor           │
+│  platform / local exec   │
+│  / skill steps           │
 └──────────────────────────┘
 ```
 
@@ -133,14 +132,25 @@ Pipeline internally uses multi-agent iteration: the orchestrator holds hypothese
 
 ### Tool Layer
 
-The agents' hands and eyes:
+Scientify organizes research capabilities as a unified semantic layer spanning the runtime registration surface and the workflow execution surface:
 
-| Tool | Capability |
-|------|-----------|
-| `arxiv_search` / `openalex_search` | Search academic papers (arXiv + cross-disciplinary) |
-| `github_search` | Search open-source code implementations |
-| `paper_browser` | Paginated paper reading, avoids context overflow |
-| `code_executor` | Execute experiment code in `uv`-isolated environment |
+| Capability semantic | Primary carrier | Typical target | Execution path | Typical outputs |
+|---------------------|-----------------|----------------|----------------|-----------------|
+| `arxiv_search`-like capability | Runtime-registered tool | arXiv metadata and candidate paper sets | Registered in the plugin entrypoint and invoked through standard tool calls | search results, candidate paper lists, survey inputs |
+| `openalex_search`-like capability | Runtime-registered tool | cross-disciplinary metadata, DOI, citation, and OA signals | Registered in the plugin entrypoint and invoked through standard tool calls | search results, complementary literature sources, survey inputs |
+| `github_search`-like capability | Workflow execution step | open-source implementations, baseline repos, reproduction leads | carried out through OpenClaw platform capabilities, local environment commands, or steps defined inside skills | `survey_res.md`, implementation references, repo links |
+| `paper_browser`-like capability | Workflow execution step | `.md`, `.tex`, long papers, and drafts | carried out through OpenClaw platform capabilities, local environment commands, or steps defined inside skills | chunked reading results, local excerpts, structured notes |
+| `code_executor`-like capability | Workflow execution step | workspace training, evaluation, scripts, and experiment runs | carried out through OpenClaw platform capabilities, local environment commands, or steps defined inside skills | run logs, validation outputs, experiment artifacts |
+| `arxiv_download`-like capability | Workflow execution step | arXiv source or PDF acquisition | carried out through OpenClaw platform capabilities, local environment commands, or steps defined inside skills | paper files under `papers/` |
+| `openreview_lookup`-like capability | Workflow execution step | reviews, decisions, and forum context | carried out through OpenClaw platform capabilities, local environment commands, or steps defined inside skills | review evidence, comparison notes, review summaries |
+| `unpaywall_download`-like capability | Workflow execution step | OA PDF acquisition by DOI | carried out through OpenClaw platform capabilities, local environment commands, or steps defined inside skills | downloaded PDFs and provenance records |
+
+At the implementation boundary:
+- the `tool registry` exposes stable, named, directly invokable runtime interfaces
+- `skills` define stage ordering, input/output contracts, and artifact materialization
+- file reads, command execution, downloads, and external-site interactions are carried out through OpenClaw platform capabilities, local environment commands, or steps defined inside skills
+
+For the current capability map, see [docs/current-capability-map.md](./docs/current-capability-map.md). For historical tool notes, see [docs/historical-tools.md](./docs/historical-tools.md).
 
 > Scientify runs on [OpenClaw](https://github.com/openclaw/openclaw), natively leveraging the platform's MCP servers (Slack / Feishu push), browser automation (paywalled paper downloads), multi-session concurrency (parallel multi-direction research), and more.
 
@@ -311,25 +321,19 @@ Check status anytime:
 
 | Skill | Description |
 |-------|-------------|
+| **paper-download** | Acquire paper files into the project workspace for downstream reading and analysis. |
+| **metabolism** | Run day-0 bootstrapping or day-N daily knowledge metabolism for a research topic. |
 | **write-review-paper** | Draft a review/survey paper from project research outputs. |
-| **research-subscription** | Create/list/remove scheduled Scientify jobs via `scientify_cron_job` (research digests or plain reminders). |
 
 </details>
 
 <details>
-<summary><b>Tools (available to LLM)</b></summary>
+<summary><b>Runtime-registered Tools</b></summary>
 
 | Tool | Description |
 |------|-------------|
 | `arxiv_search` | Search arXiv papers. Returns metadata (title, authors, abstract, ID). Supports sorting by relevance/date and date filtering. |
-| `arxiv_download` | Batch download papers by arXiv ID. Prefers .tex source files (PDF fallback). |
 | `openalex_search` | Search cross-disciplinary academic papers via OpenAlex API. Returns DOI, authors, citation count, OA status. |
-| `openreview_lookup` | Lookup OpenReview evidence by title/ID/forum. Returns decision, review rating/confidence aggregates, and review summaries. |
-| `unpaywall_download` | Download open access PDFs by DOI via Unpaywall API. Non-OA papers are silently skipped. |
-| `github_search` | Search GitHub repositories. Returns repo name, description, stars, URL. Supports language filtering and sorting. |
-| `paper_browser` | Paginated browsing of large paper files (.tex/.md) to avoid context overflow. |
-| `scientify_cron_job` | Manage scheduled Scientify jobs (`upsert`/`list`/`remove`). |
-| `scientify_literature_state` | Persistent incremental state for subscriptions: dedupe, record, feedback, and status inspection. |
 
 </details>
 
@@ -343,9 +347,7 @@ Check status anytime:
 | `/ideas` | List generated ideas |
 | `/projects` | List all projects |
 | `/project-delete <id>` | Delete a project |
-| `/research-subscribe ...` | Create/update scheduled Scientify jobs |
-| `/research-subscriptions` | Show your scheduled Scientify jobs |
-| `/research-unsubscribe [job-id]` | Remove your scheduled Scientify jobs |
+| `/metabolism-status` | Show knowledge metabolism status for the active project |
 
 </details>
 

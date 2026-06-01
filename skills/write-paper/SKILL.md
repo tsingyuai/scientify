@@ -31,6 +31,10 @@ You need a real evidence base from existing artifacts, ideally:
 
 If the evidence base is too thin, write the draft conservatively and mark unsupported sections as `TODO`.
 
+## Claim Boundary Rule
+
+This skill is claim-bounded. It may organize, compress, and explain existing evidence, but it must not upgrade the strength of a result. When the source artifact supports only a scoped observation, write the scoped observation. When the evidence is simulator-only, proxy-only, preliminary, or convention-dependent, keep that boundary visible in the claim inventory and in the manuscript text.
+
 ## Required Outputs
 
 - `paper/claim_inventory.md`
