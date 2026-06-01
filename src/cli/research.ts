@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { renderBootstrapMd, renderSoulMd, renderAgentsMd } from "../templates/bootstrap.js";
+import { buildProjectSnapshot, countFiles, formatArtifactPresence, inferNextAction } from "../commands.js";
 import { formatReleaseGateStatus, getReleaseGateNextStep, hasReleaseFacingArtifacts, readReleaseGateStatus } from "../release-gate.js";
 
 const OPENCLAW_HOME = path.join(os.homedir(), ".openclaw");
@@ -254,17 +255,24 @@ function showStatus(id: string): void {
     process.exit(1);
   }
 
-  const knowledgeDir = path.join(project.workspace, "knowledge");
-  const hypothesesDir = path.join(project.workspace, "ideas");
-  let topicCount = 0;
-  let hypothesisCount = 0;
-
-  try {
-    topicCount = fs.readdirSync(knowledgeDir).filter((f) => f.startsWith("topic-")).length;
-  } catch { /* empty */ }
-  try {
-    hypothesisCount = fs.readdirSync(hypothesesDir).filter((f) => f.endsWith(".md")).length;
-  } catch { /* empty */ }
+  const topicCount = countFiles(
+    path.join(project.workspace, "knowledge"),
+    (f) => f.startsWith("topic-"),
+  );
+  const hypothesisCount = countFiles(
+    path.join(project.workspace, "ideas"),
+    (f) => f.startsWith("hyp-"),
+  );
+  const papersCount = countFiles(
+    path.join(project.workspace, "papers"),
+    (f) => f.endsWith(".tex") || f.endsWith(".pdf"),
+  );
+  const ideasCount = countFiles(
+    path.join(project.workspace, "ideas"),
+    (f) => f.endsWith(".md"),
+  );
+  const snapshot = buildProjectSnapshot(project.workspace);
+  const next = inferNextAction(snapshot);
 
   console.log(`\nResearch Project: ${id}`);
   console.log(`  Agent:      ${project.agentId}`);
@@ -272,6 +280,13 @@ function showStatus(id: string): void {
   console.log(`  Day:        ${project.currentDay}`);
   console.log(`  Topics:     ${topicCount}`);
   console.log(`  Hypotheses: ${hypothesisCount}`);
+  console.log(`  Papers:     ${papersCount}`);
+  console.log(`  Ideas:      ${ideasCount}`);
+  console.log(`  Stage:      ${next.stage}`);
+  console.log(`  Artifacts:  ${formatArtifactPresence(snapshot)}`);
+  console.log(`  Next:       ${next.command}`);
+  console.log(`  Why:        ${next.reason}`);
+  console.log(`  Expected:   ${next.expectedOutputs.join(", ")}`);
   const gateStatus = readReleaseGateStatus(project.workspace);
   if (hasReleaseFacingArtifacts(project.workspace) || gateStatus.state !== "missing") {
     console.log(`  Release:    ${formatReleaseGateStatus(gateStatus)}`);
@@ -280,7 +295,7 @@ function showStatus(id: string): void {
     }
     const nextStep = getReleaseGateNextStep(project.workspace, gateStatus);
     if (nextStep) {
-      console.log(`  Next:       ${nextStep}`);
+      console.log(`  ReleaseNext: ${nextStep}`);
     }
   }
   if (project.createdAt) {

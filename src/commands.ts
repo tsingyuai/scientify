@@ -11,7 +11,7 @@ interface ResearchAgent {
   workspace: string;
 }
 
-interface ProjectSnapshot {
+export interface ProjectSnapshot {
   hasConfig: boolean;
   hasSurvey: boolean;
   hasSelection: boolean;
@@ -23,7 +23,7 @@ interface ProjectSnapshot {
   hasExperiment: boolean;
 }
 
-interface NextActionState {
+export interface NextActionState {
   stage: string;
   command: string;
   expectedOutputs: string[];
@@ -49,7 +49,7 @@ function listResearchAgents(): ResearchAgent[] {
   }
 }
 
-function countFiles(dirPath: string, filter?: (name: string) => boolean): number {
+export function countFiles(dirPath: string, filter?: (name: string) => boolean): number {
   try {
     const entries = fs.readdirSync(dirPath);
     return filter ? entries.filter(filter).length : entries.length;
@@ -91,7 +91,7 @@ function readLatestReviewVerdict(workspace: string): ProjectSnapshot["latestRevi
   }
 }
 
-function buildProjectSnapshot(workspace: string): ProjectSnapshot {
+export function buildProjectSnapshot(workspace: string): ProjectSnapshot {
   return {
     hasConfig: fileExists(path.join(workspace, "config.json")),
     hasSurvey: fileExists(path.join(workspace, "survey_res.md")),
@@ -105,7 +105,7 @@ function buildProjectSnapshot(workspace: string): ProjectSnapshot {
   };
 }
 
-function inferNextAction(snapshot: ProjectSnapshot): NextActionState {
+export function inferNextAction(snapshot: ProjectSnapshot): NextActionState {
   if (!snapshot.hasConfig) {
     return {
       stage: "Bootstrap pending",
@@ -195,7 +195,7 @@ function inferNextAction(snapshot: ProjectSnapshot): NextActionState {
   };
 }
 
-function formatArtifactPresence(snapshot: ProjectSnapshot): string {
+export function formatArtifactPresence(snapshot: ProjectSnapshot): string {
   const items = [
     ["survey", snapshot.hasSurvey],
     ["selection", snapshot.hasSelection],

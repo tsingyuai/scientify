@@ -37,7 +37,6 @@ function defaultReleaseGateInputs(workspace: string): string[] {
     "paper/draft.md",
     "paper/claim_inventory.md",
     "paper/figures_manifest.md",
-    "paper/manuscript.tex",
     "README.md",
     "docs/index.html",
   ];
