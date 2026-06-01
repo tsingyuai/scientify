@@ -8,6 +8,7 @@
   "files": [
     "dist",
     "skills",
+    "docs",
     "openclaw.plugin.json"
   ],
   "keywords": [

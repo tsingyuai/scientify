@@ -18,6 +18,8 @@ Use this skill to turn one-off Scientify charts into release-ready figures.
 
 **Do not run new experiments here.** Work from existing results, plotting scripts, and figure bundles. If the source data is missing or inconsistent, report that explicitly instead of smoothing it over.
 
+This skill may regenerate figures only from existing scripts and existing result data. It must not change metrics, filters, baselines, sample sets, or experimental conclusions. If a visual improvement would require new evidence, stop and ask for `/research-experiment` or the relevant project workflow instead.
+
 ## Required Outputs
 
 1. Updated plotting script(s) or a shared style helper
@@ -108,3 +110,4 @@ Keep filenames stable unless the user explicitly asked for a new release bundle.
 5. Do not change the scientific claim. This skill improves packaging, not evidence.
 6. If a figure is paper-facing, produce both a long caption and a first-use callout sentence.
 7. If a figure supports a claim, the manifest must name that claim in `supports_claim_ids`.
+8. Do not silently change source data, metric definitions, or baseline membership while polishing a figure.

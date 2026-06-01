@@ -16,6 +16,8 @@ metadata:
 
 This is a release-readiness review skill. It does **not** invent new claims or run new experiments. It checks whether the current artifacts are safe to share.
 
+For README, docs, figure bundles, and papers, review the same claim boundary across every surface. A claim that is cautious in `paper/claim_inventory.md` must not become stronger in a README headline, figure caption, abstract, or release page.
+
 ## Required Outputs
 
 - `review/artifact_review.md`
@@ -50,6 +52,8 @@ Review the artifact set in one or more of these modes:
 ### Step 1: Inventory the Artifact Set
 
 List the files being reviewed, the headline claims they appear to make, the source artifact path for each headline claim when available, which figures or tables support them, and which review mode applies to each file (`paper review`, `figure review`, `release page review`, or `style review`).
+
+When README or docs are in scope, map their first-screen claims back to the same evidence inventory used by the paper or experiment report. When figures are in scope, map each caption takeaway to the figure data source and to `supports_claim_ids` when a paper manifest exists.
 
 ### Step 2: Review Findings First
 

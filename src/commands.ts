@@ -21,6 +21,8 @@ export interface ProjectSnapshot {
   hasImplementationReport: boolean;
   latestReviewVerdict: "PASS" | "NEEDS_REVISION" | "NEEDS_ALGORITHM_REVIEW" | "BLOCKED" | "MISSING" | "UNKNOWN";
   hasExperiment: boolean;
+  hasPaper: boolean;
+  hasArtifactReview: boolean;
 }
 
 export interface NextActionState {
@@ -66,6 +68,23 @@ function fileExists(filePath: string): boolean {
   }
 }
 
+function hasAnyFile(workspace: string, paths: string[]): boolean {
+  return paths.some((p) => fileExists(path.join(workspace, p)));
+}
+
+function hasCompletedPaperArtifact(workspace: string): boolean {
+  return hasAnyFile(workspace, [
+    "paper/draft.md",
+    "paper/manuscript.tex",
+    "paper/build/manuscript.pdf",
+  ]);
+}
+
+function hasCompletedArtifactReview(workspace: string): boolean {
+  const gateStatus = readReleaseGateStatus(workspace);
+  return gateStatus.state === "fresh" && gateStatus.verdict !== "HOLD";
+}
+
 function readLatestReviewVerdict(workspace: string): ProjectSnapshot["latestReviewVerdict"] {
   const iterationsDir = path.join(workspace, "iterations");
   if (!fileExists(iterationsDir)) return "MISSING";
@@ -102,6 +121,8 @@ export function buildProjectSnapshot(workspace: string): ProjectSnapshot {
     hasImplementationReport: fileExists(path.join(workspace, "ml_res.md")),
     latestReviewVerdict: readLatestReviewVerdict(workspace),
     hasExperiment: fileExists(path.join(workspace, "experiment_res.md")),
+    hasPaper: hasCompletedPaperArtifact(workspace),
+    hasArtifactReview: hasCompletedArtifactReview(workspace),
   };
 }
 
@@ -187,11 +208,29 @@ export function inferNextAction(snapshot: ProjectSnapshot): NextActionState {
     };
   }
 
+  if (!snapshot.hasPaper) {
+    return {
+      stage: "Paper drafting",
+      command: "/write-paper",
+      expectedOutputs: ["paper/claim_inventory.md", "paper/figures_manifest.md", "paper/draft.md", "paper/manuscript.tex"],
+      reason: "The evidence chain has experiment results, but no paper-facing claim inventory, figure manifest, or draft has been detected yet.",
+    };
+  }
+
+  if (!snapshot.hasArtifactReview) {
+    return {
+      stage: "Artifact review",
+      command: "/artifact-review",
+      expectedOutputs: ["review/artifact_review.md", "review/release_checklist.md", "review/release_gate.json"],
+      reason: "Paper or release-facing artifacts exist, but they have not yet passed the release-readiness review gate.",
+    };
+  }
+
   return {
-    stage: "Experiment complete",
-    command: "/write-review-paper",
-    expectedOutputs: ["review/"],
-    reason: "The core ML execution chain is complete, so the project can move into synthesis, survey writing, or outward-facing summaries.",
+    stage: "Ready for release layout",
+    command: "/release-layout",
+    expectedOutputs: ["README.md or docs/index.html updates"],
+    reason: "Core research, paper-facing artifacts, and artifact review exist, so the next step is clearer external packaging if needed.",
   };
 }
 
@@ -205,6 +244,8 @@ export function formatArtifactPresence(snapshot: ProjectSnapshot): string {
     ["implement", snapshot.hasImplementationReport],
     ["review", snapshot.latestReviewVerdict === "PASS"],
     ["experiment", snapshot.hasExperiment],
+    ["paper", snapshot.hasPaper],
+    ["artifact_review", snapshot.hasArtifactReview],
   ];
 
   return items.map(([label, ok]) => `${ok ? "yes" : "no"} ${label}`).join(" | ");

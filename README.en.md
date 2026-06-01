@@ -133,6 +133,8 @@ At the implementation boundary:
 - `skills` define stage ordering, input/output contracts, and artifact materialization
 - file reads, command execution, downloads, and external-site interactions are carried out through OpenClaw platform capabilities, local environment commands, or steps defined inside skills
 
+For the current capability map, see [docs/current-capability-map.md](./docs/current-capability-map.md). For historical tool notes, see [docs/historical-tools.md](./docs/historical-tools.md).
+
 > Scientify runs on [OpenClaw](https://github.com/openclaw/openclaw), natively leveraging the platform's MCP servers (Slack / Feishu push), browser automation (paywalled paper downloads), multi-session concurrency (parallel multi-direction research), and more.
 
 ### Knowledge Base

@@ -7,11 +7,13 @@
 Scientify 是一个 OpenClaw 插件，提供 AI 驱动的科研工作流自动化功能。
 
 **核心组件：**
-- `src/tools/` - 工具实现（arxiv_search, arxiv_download, openalex_search, unpaywall_download, github_search, paper_browser）
+- `src/tools/` - 当前运行时工具实现（`arxiv_search`, `openalex_search`）
 - `src/commands.ts` - 聊天命令处理
 - `skills/` - 技能定义（随 npm 包发布）
 - `index.ts` - 插件入口
 - `openclaw.plugin.json` - 插件注册（skills 列表）
+
+历史上存在但已下沉到 skill / shell / OpenClaw 平台能力的工具，请看 `docs/historical-tools.md`。
 
 ## 版本更新 SOP
 
@@ -122,11 +124,11 @@ scientify/
 │   ├── openclaw.d.ts        # 类型声明
 │   └── tools/
 │       ├── arxiv-search.ts         # ArXiv 搜索工具
-│       ├── arxiv-download.ts       # ArXiv 下载工具（含速率限制）
 │       ├── openalex-search.ts      # OpenAlex 跨学科搜索
-│       ├── unpaywall-download.ts   # Unpaywall OA PDF 下载
-│       ├── github-search-tool.ts   # GitHub 搜索工具
-│       └── paper-browser.ts        # 论文分页浏览工具
+│       └── result.ts               # Tool result helpers
+├── docs/
+│   ├── current-capability-map.md   # 当前工具 / skill / 工作流能力地图
+│   └── historical-tools.md         # 历史 tool 考据
 ├── skills/
 │   ├── idea-generation/
 │   │   ├── SKILL.md
