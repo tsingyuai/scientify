@@ -31,11 +31,11 @@ Scientify autonomously completed the literature survey, hypothesis generation, c
   <sub>KV2 performance compared with existing methods</sub>
 </p>
 
-## 2. The Advantage of Continuous Accumulation: Controlled Study Accepted at ICML 2026
+## 2. Leading Agent Performance: Related Paper Accepted at ICML 2026
 
 Scientify uses **continuous knowledge metabolism**: it follows emerging literature, connects new findings with accumulated knowledge, and refines hypotheses using experimental results. Knowledge, hypotheses, and experimental experience persist across research rounds, enabling deeper investigation over time.
 
-We compared continuous knowledge metabolism with the conventional batch paradigm across **50 research topics and 892 generated hypotheses**. Metabolism achieved **1.9 times** the baseline hypothesis hit rate, generated **26% more** useful hypotheses per topic, and reduced the Token cost per hypothesis by **92%**.
+We compared Scientify's continuous knowledge metabolism with the processing approach of traditional agents across **50 research topics and 892 generated hypotheses**. Scientify achieved **1.9 times** the baseline hypothesis hit rate, generated **26% more** useful hypotheses per topic, and reduced Token costs by **92%**.
 
 > **The paper has been accepted at ICML 2026.**
 >
