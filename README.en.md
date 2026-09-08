@@ -31,15 +31,15 @@ Scientify autonomously completed the literature survey, hypothesis generation, c
   <sub>KV2 performance compared with existing methods</sub>
 </p>
 
-### Case Study 2: Discovering Patterns in Computational Data, Building and Testing a Theoretical Model
+### Case Study 2: Discovering Three Black-Hole Transition Boundaries and Deriving and Testing Their Conditions
 
 Scientify independently performed the theoretical derivations, numerical analysis, and manuscript preparation for [Equilibrium Gibbs Bifurcations of Bardeen-AdS Black Holes at Fixed Pressure](https://arxiv.org/abs/2606.00099v1).
 
-**Research question**: In the black-hole model studied in this paper, what changes occur as its parameters vary? Can one unifying rule explain and predict these changes?
+**Research question**: The paper studies a black hole with a smooth central region. As the scale of that region increases, can small and large black holes still coexist stably at the same temperature? Under what conditions does that coexistence disappear?
 
-- **Discovering patterns in data**: Scientify analyzed numerical results across parameter settings, identified four stages of change, and located the three boundaries between them, revealing the full sequence.
-- **Building a predictive model**: Scientify combined two parameters into one key variable and derived a shared rule for how all three boundaries depend on pressure: quadrupling the pressure halves the corresponding boundary parameter value. It also obtained an exact formula for the final boundary, allowing the model to calculate when that change occurs.
-- **Testing the model through computation**: Scientify compared calculations at three different pressures with theoretical predictions, confirming the same scaling rule. Stability analysis then determined which states could remain stable within the model, showing that two black-hole states can still stably coexist after the curve first changes shape.
+- **Finding three transitions in the calculations**: Scientify calculated black-hole temperature and free energy, which compares the stability of competing states, at different central-region scales. It found that the free-energy curve changes from a swallow-tail to an 8-shape, then a c-shape, and finally a single branch, and located all three changes.
+- **Building a model that predicts transition conditions**: Scientify derived how the central-region scale at each transition decreases as thermodynamic pressure rises: quadrupling the pressure halves that scale. It also obtained the exact condition at which the temperature curve becomes single-branched, allowing this boundary to be calculated directly at a given pressure.
+- **Checking predictions and stable coexistence**: Scientify checked the transition boundaries numerically at three pressures, then tested whether small and large black holes were individually stable and had equal free energy. Stable coexistence persists after the swallow-tail becomes an 8-shape; it is absent in the c-shaped example examined.
 
 ## 2. Leading Agent Performance: Related Paper Accepted at ICML 2026
 
