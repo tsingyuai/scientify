@@ -31,15 +31,15 @@ Scientify autonomously completed the literature survey, hypothesis generation, c
   <sub>KV2 performance compared with existing methods</sub>
 </p>
 
-### Case Study 2: Independently Producing a Black-Hole Thermodynamics Paper on Gibbs Bifurcations
+### Case Study 2: Discovering Patterns in Computational Data, Building and Testing a Theoretical Model
 
 Scientify independently performed the theoretical derivations, numerical analysis, and manuscript preparation for [Equilibrium Gibbs Bifurcations of Bardeen-AdS Black Holes at Fixed Pressure](https://arxiv.org/abs/2606.00099v1).
 
-**Research question**: At fixed pressure, how do black-hole free-energy curves and stable phases evolve as the regularization scale that removes the central singularity increases?
+**Research question**: In the black-hole model studied in this paper, what changes occur as its parameters vary? Can one unifying rule explain and predict these changes?
 
-- **Model contribution**: A fixed-pressure Gibbs bifurcation framework for four-dimensional Bardeen-AdS black holes under the direct horizon thermodynamic convention, with $G=M-TS$. Turning-point and self-intersection classification, positive-heat-capacity filtering, and the lower free-energy envelope over stable branches connect curve topology, local stability, and equilibrium phase selection.
-- **Theoretical contribution**: Reduction of pressure $P$ and regularization scale $g$ to a single control parameter, $\lambda=8\pi Pg^2$, deriving $g_i(P)\propto P^{-1/2}$ for all three bifurcation boundaries and the exact final single-branch threshold $\lambda_s=73/48-13\sqrt{273}/144$.
-- **Physical finding**: Analytical and numerical results resolve the sequence from an RN-AdS-like swallow-tail through 8-shaped and c-shaped curves to a single branch. Stable small/large black-hole coexistence survives the first topology change; the representative c-shaped case has no stable coexistence crossing.
+- **Discovering patterns in data**: Scientify analyzed numerical results across parameter settings, identified four stages of change, and located the three boundaries between them, revealing the full sequence.
+- **Building a predictive model**: Scientify combined two parameters into one key variable and derived a shared rule for how all three boundaries depend on pressure: quadrupling the pressure halves the corresponding boundary parameter value. It also obtained an exact formula for the final boundary, allowing the model to calculate when that change occurs.
+- **Testing the model through computation**: Scientify compared calculations at three different pressures with theoretical predictions, confirming the same scaling rule. Stability analysis then determined which states could remain stable within the model, showing that two black-hole states can still stably coexist after the curve first changes shape.
 
 ## 2. Leading Agent Performance: Related Paper Accepted at ICML 2026
 
