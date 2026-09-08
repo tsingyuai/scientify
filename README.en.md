@@ -1,406 +1,59 @@
 <h1 align="center">Scientify</h1>
 <p align="center">
-  <em>Continuous Knowledge Metabolism for AI Research</em>
+  <em>End-to-End AI Research That Continuously Evolves</em>
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/scientify"><img src="https://img.shields.io/npm/v/scientify?style=for-the-badge&logo=npm&logoColor=white" alt="npm version"></a>
-  <a href="https://github.com/tsingyuai/scientify"><img src="https://img.shields.io/github/stars/tsingyuai/scientify?style=for-the-badge&logo=github" alt="GitHub stars"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="MIT License"></a>
-  <a href="https://github.com/openclaw/openclaw"><img src="https://img.shields.io/badge/OpenClaw-plugin-00FF9F?style=for-the-badge" alt="OpenClaw plugin"></a>
+  <a href="https://scientify.tech">Scientify.tech</a> · <a href="./README.md">中文</a>
 </p>
 
-<p align="center">
-  <a href="https://scientify.tech">Website</a> · <a href="./README.md">中文</a> · <a href="https://github.com/tsingyuai/scientify/issues">Issues</a>
-</p>
+## 1. End-to-End Autonomous Research: Continuous Iteration, SOTA-Level Results
 
----
+Give Scientify a research objective. It autonomously surveys the literature, generates hypotheses, implements code, reviews the implementation, and runs experiments, then refines the research direction based on the results.
 
-## What It Does
+Scientify advances research through multi-agent iteration. An orchestrator retains the hypotheses and accumulated knowledge, coordinating independent agents for implementation, review, and experimentation. Each round contributes experience to the next, helping the research progress along more effective paths.
 
-> [!IMPORTANT]
-> Scientify is not another "ask once, answer once" AI tool. It acts like a real research partner — **continuously thinking, accumulating, and delivering**.
+### Case Study: Autonomously Discovering KV2 with Field-Leading Performance
 
-### 1. Metabolism: Continuous Thinking, Not One-Shot Answers
+**Research objective**: Design a strategy for long-context LLM inference that reduces both time to first token and communication volume per request.
 
-Existing AI research tools work in **batch mode** — give it a question, run a pipeline, get a report, done. Ask the same direction next time, it starts from scratch. Running 10 times is no different from running once.
-
-But human researchers don't work this way. You read, run experiments, and think every day. Yesterday's failure changes today's reading; last week's conversation changes this week's experiment design.
-
-Scientify adopts a **metabolism mode** — continuously ingesting, digesting, accumulating, and re-ingesting:
-
-- **Continuous ingestion**: Automatically tracks frontier papers daily, no manual trigger needed
-- **Digestion & accumulation**: Links new knowledge with existing accumulation, writes to persistent knowledge base
-- **Hypothesis evolution**: Discards ineffective hypotheses, evolves effective paths — every failure feeds the next round
-- **Proactive delivery**: Automatically verifies noteworthy findings and pushes results to you
-
-The longer you use it, the deeper its research goes.
+Scientify autonomously completed the literature survey, hypothesis generation, code implementation, and ablation experiments to propose the **KV2 algorithm**. Compared with existing research, KV2 reduced both the 95th percentile of time to first token (TTFT p95) and communication volume per request (bytes/request), achieving **SOTA-level performance**.
 
 <p align="center">
-  <img src="docs/assets/showcase/3.png" width="50%" alt="Scientify proactively pushes research progress via Feishu">
+  <img src="docs/assets/showcase/1.png" width="80%" alt="KV2 paper and experimental results produced autonomously by Scientify">
   <br>
-  <sub>Scientify proactively pushes latest findings to researchers via Feishu, with insights drawn from its knowledge base</sub>
+  <sub>A paper autonomously produced by Scientify, presenting the KV2 design and experimental results</sub>
 </p>
 
-#### How big is the advantage? We ran a controlled study.
+<p align="center">
+  <img src="docs/assets/showcase/2.png" width="80%" alt="KV2 comparison with existing methods on time to first token and communication volume">
+  <br>
+  <sub>KV2 performance compared with existing methods</sub>
+</p>
 
-Metabolism is not just an engineering choice — it produces qualitatively different research. We compared metabolism mode against the conventional batch paradigm on **50 research topics, 892 generated hypotheses**. Paper: [arXiv:2604.12243](https://arxiv.org/abs/2604.12243).
+## 2. The Advantage of Continuous Accumulation: Controlled Study Accepted at ICML 2026
+
+Scientify uses **continuous knowledge metabolism**: it follows emerging literature, connects new findings with accumulated knowledge, and refines hypotheses using experimental results. Knowledge, hypotheses, and experimental experience persist across research rounds, enabling deeper investigation over time.
+
+We compared continuous knowledge metabolism with the conventional batch paradigm across **50 research topics and 892 generated hypotheses**. Metabolism achieved **1.9 times** the baseline hypothesis hit rate, generated **26% more** useful hypotheses per topic, and reduced the Token cost per hypothesis by **92%**.
+
+> **The paper has been accepted at ICML 2026.**
+>
+> [Continuous Knowledge Metabolism: Generating Scientific Hypotheses from Evolving Literature](https://arxiv.org/abs/2604.12243)
 
 <p align="center">
-  <img src="docs/assets/showcase/metabolism-vs-batch.en.svg" width="100%" alt="Metabolism vs Batch: key metrics from a controlled study on 50 topics and 892 hypotheses">
+  <img src="docs/assets/showcase/metabolism-vs-batch.en.svg" width="100%" alt="Controlled study of metabolism versus batch: key metrics across 50 topics and 892 hypotheses">
 </p>
 
 | Metric | Batch baseline | Metabolism | Difference |
 |--------|----------------|------------|------------|
-| Hit Rate — fraction of hypotheses validated by later papers | 3.0% | **5.8%** | **1.9× (nearly doubled)** |
+| Hit rate: fraction of hypotheses validated by later papers | 3.0% | **5.8%** | **1.9 times** |
 | Useful hypotheses per topic | 13.7 | **17.3** | **+26%** |
 | LLM-judged novelty (1–10 scale) | 6.39 | **6.82** | **+0.43** |
-| Token cost per hypothesis | 434K | **30K** | **−92%** |
+| Token cost per hypothesis | 434K | **30K** | **92% lower** |
 
-> 📄 Read the full paper: [Continuous Knowledge Metabolism: Generating Scientific Hypotheses from Evolving Literature](https://arxiv.org/abs/2604.12243)
+## 3. How to Use Scientify
 
-### 2. End-to-End Autonomous Research: Achieving SOTA-Level Results
+Visit **[Scientify.tech](https://scientify.tech)**, sign up or log in, and enter your research objective in the workspace to begin.
 
-Give it a research topic, and it completes the entire study — producing new algorithms that outperform existing literature.
-
-Driven by multi-agent iteration: the orchestrator holds hypotheses and all accumulated knowledge, only dispatching — never writing code itself; each round spawns independent sub-agents for implementation, review, and experimentation; every failure is distilled into experience for the next round, refining hypotheses until a superior method is discovered.
-
-### Showcase: Autonomously Discovered the KV2 Algorithm with Field-Leading Performance
-
-> **Objective**: For long-context LLM inference, design a strategy that simultaneously reduces time-to-first-token latency and per-request communication volume.
->
-> Scientify autonomously completed literature survey, hypothesis generation, code implementation, and experimental validation, proposing the **KV2 algorithm**. Compared to existing research, both TTFT p95 and bytes/request were reduced to varying degrees, achieving SOTA-level performance.
-
-<p align="center">
-  <img src="docs/assets/showcase/1.png" width="80%" alt="KV2 algorithm experimental results">
-  <br>
-  <sub>KV2 algorithm experimental results on first-token latency and communication volume</sub>
-</p>
-
-<p align="center">
-  <img src="docs/assets/showcase/2.png" width="80%" alt="KV2 comparison with existing methods">
-  <br>
-  <sub>KV2 SOTA comparison with existing methods</sub>
-</p>
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Researcher                                                  │
-│  Conversation · Feed materials · Judge hypotheses            │
-└──────────────┬──────────────────────────────┬───────────────┘
-               ↓                              ↓
-┌──────────────────────────┐   ┌──────────────────────────────┐
-│  Agent Layer              │   │  Knowledge Base (persistent)  │
-│                          │   │                              │
-│  Heartbeat  Daily wakeup │←→│  _index.md                   │
-│  Reflection Cross-domain │   │  topic-*.md                  │
-│  Pipeline   Hypothesis   │   │  hypotheses/                 │
-│             verification │   │  experiments/                │
-└──────────┬───────────────┘   │  conversations/              │
-           ↓                   │                              │
-┌──────────────────────────┐   │  Markdown files · Git-managed│
-│  Tool Layer               │   │  Fully auditable · You can   │
-│                          │──→│  edit them too               │
-│  arxiv_search            │   └──────────────────────────────┘
-│  openalex_search         │
-│  github_search           │
-│  paper_browser           │
-│  code_executor           │
-└──────────────────────────┘
-```
-
-Four components, each with a clear role:
-
-### Researcher
-
-You are part of the system. Inject judgment through conversation, feed materials, confirm or reject hypotheses. Your participation makes the metabolism direction more accurate and research hypotheses more precise.
-
-### Agent Layer
-
-Three loops drive the metabolism:
-
-| Agent | What it does | Trigger |
-|-------|-------------|---------|
-| **Heartbeat** | Tracks frontier papers daily; when it finds relevant work, autonomously verifies and pushes results to you | Scheduled auto-wakeup |
-| **Reflection** | Cross-domain exploration — connects knowledge across different topics, discovers unexpected links | Heartbeat / Researcher |
-| **Pipeline** | End-to-end research execution — literature survey → deep analysis → implementation → review → experiment | Researcher / Reflection |
-
-Pipeline internally uses multi-agent iteration: the orchestrator holds hypotheses and spawns sub-agents for implementation (`implement`), review (`review`), and experimentation (`experiment`). Each failure is distilled into experience; hypotheses are refined with each round.
-
-### Tool Layer
-
-The agents' hands and eyes:
-
-| Tool | Capability |
-|------|-----------|
-| `arxiv_search` / `openalex_search` | Search academic papers (arXiv + cross-disciplinary) |
-| `github_search` | Search open-source code implementations |
-| `paper_browser` | Paginated paper reading, avoids context overflow |
-| `code_executor` | Execute experiment code in `uv`-isolated environment |
-
-> Scientify runs on [OpenClaw](https://github.com/openclaw/openclaw), natively leveraging the platform's MCP servers (Slack / Feishu push), browser automation (paywalled paper downloads), multi-session concurrency (parallel multi-direction research), and more.
-
-### Knowledge Base
-
-All accumulation is persisted as Markdown files, Git-managed, every change is traceable. You and the agents read and write the same files:
-
-```
-knowledge_state/
-├── _index.md              # Global research index
-├── topic-*.md             # Knowledge organized by topic
-├── hypotheses/            # Hypothesis evolution records
-├── experiments/           # Experiment results & analysis
-├── paper_notes/           # Per-paper deep reading records
-└── logs/                  # Metabolism run logs
-```
-
----
-
-## Prerequisites
-
-- **Node.js** >= 18
-- **Python 3** + **uv** (for ML code execution)
-- **git**
-
----
-
-## Install OpenClaw
-
-```bash
-# Install OpenClaw globally
-pnpm add -g openclaw    # or: npm install -g openclaw
-
-# Run onboarding wizard (configures model provider, API key, workspace)
-openclaw onboard
-
-# Start the gateway (runs the WebUI server)
-openclaw gateway
-```
-
-After `openclaw gateway`, the WebUI is available at **http://127.0.0.1:18789/** (default port).
-
-> **Proxy users:** If you have `http_proxy` set, access the WebUI with `--noproxy 127.0.0.1` or configure your browser accordingly.
-
----
-
-## Install Scientify
-
-```bash
-openclaw plugins install scientify
-```
-
-The plugin installs to `~/.openclaw/extensions/` and is automatically enabled.
-
-### From source (development)
-
-```bash
-git clone https://github.com/tsingyuai/scientify.git
-cd scientify && pnpm install && pnpm build
-
-# Link as dev plugin
-openclaw plugins install -l ./
-```
-
-### Verify installation
-
-```bash
-openclaw plugins list
-# Should show: Scientify (loaded)
-```
-
-After installation, **restart the gateway** to load the plugin:
-
-```bash
-# Stop the running gateway (Ctrl+C), then:
-openclaw gateway
-```
-
----
-
-## Usage via WebUI
-
-### 1. Open the WebUI
-
-Navigate to **http://127.0.0.1:18789/** in your browser.
-
-### 2. Start a research task
-
-Type a research prompt in the chat. Scientify skills are auto-matched by the LLM:
-
-```
-Research "transformer efficiency" and generate some innovative ideas
-```
-
-Or invoke a specific skill directly with a slash command:
-
-```
-/research-pipeline
-/research-collect
-/idea-generation
-/algorithm-selection
-/dataset-validate
-```
-
-## New Skills for Midstream ML Work
-
-- `/algorithm-selection`
-  - use this after `/research-survey` and before `/research-plan`
-  - purpose: make 2-3 candidate routes explicit and record `Chosen Route / Rejected Routes / Fallback Route`
-- `/dataset-validate`
-  - use this when `plan_res.md` already exists and you want to validate data quality before implementation or model review
-  - purpose: review data reality, splits, labels, leakage risk, and mock-data usage separately from model quality
-- `/baseline-runner`
-  - use this when `plan_res.md` already exists and the project needs real baseline comparisons
-  - purpose: standardize baselines, protocol, metrics, and result recording, then write `baseline_res.md`
-
-### 3. Monitor sub-agent progress
-
-When the orchestrator spawns sub-agents, you'll see:
-- **Spawn notification** — "Phase 1: Literature Survey started"
-- **Completion announcement** — automatic message when the sub-agent finishes
-- **Progress updates** — the orchestrator verifies outputs and advances to the next phase
-
-Check status anytime:
-
-```
-/research-status
-```
-
-### 4. Manage projects
-
-```
-/projects              # List all projects
-/project-switch <id>   # Switch to a different project
-/papers                # List downloaded papers
-/ideas                 # List generated ideas
-```
-
----
-
-## Skills & Tools
-
-<details>
-<summary><b>Pipeline Skills (LLM-powered)</b></summary>
-
-| Skill | Slash Command | Description |
-|-------|---------------|-------------|
-| **research-pipeline** | `/research-pipeline` | Orchestrator. Spawns sub-agents for each phase, verifies outputs between steps. |
-| **research-collect** | `/research-collect` | Search arXiv → filter → download .tex sources → cluster → generate survey report. |
-| **research-survey** | `/research-survey` | Deep analysis of papers: extract formulas, map to code, produce method comparison table. |
-| **algorithm-selection** | `/algorithm-selection` | Choose between 2-3 plausible ML routes, record rejected routes, and keep a fallback. |
-| **research-plan** | `/research-plan` | Create 4-part implementation plan (Dataset/Model/Training/Testing) from survey results. |
-| **dataset-validate** | `/dataset-validate` | Audit data reality, splits, labels, and leakage risk before model review. |
-| **baseline-runner** | `/baseline-runner` | Run or audit strong baselines under the same protocol before headline comparisons. |
-| **research-implement** | `/research-implement` | Implement ML code from plan, run 2-epoch validation with `uv` venv isolation. |
-| **research-review** | `/research-review` | Review implementation. Iterates fix → rerun → review up to 3 times. |
-| **research-experiment** | `/research-experiment` | Full training + ablation experiments. Requires review PASS. |
-| **idea-generation** | `/idea-generation` | Generate 5 innovative research ideas from a topic, select and enhance the best one. |
-| **write-paper** | `/write-paper` | Draft a result-driven paper or technical report from experiment artifacts. |
-| **artifact-review** | `/artifact-review` | Review a draft, README, or figure set before external sharing. |
-| **figure-standardize** | `/figure-standardize` | Normalize figure filenames, captions, labels, and reuse metadata. |
-| **release-layout** | `/release-layout` | Repackage existing artifacts into a clearer README or release entry surface. |
-
-</details>
-
-<details>
-<summary><b>Standalone Skills</b></summary>
-
-| Skill | Description |
-|-------|-------------|
-| **write-review-paper** | Draft a review/survey paper from project research outputs. |
-| **research-subscription** | Create/list/remove scheduled Scientify jobs via `scientify_cron_job` (research digests or plain reminders). |
-
-</details>
-
-<details>
-<summary><b>Tools (available to LLM)</b></summary>
-
-| Tool | Description |
-|------|-------------|
-| `arxiv_search` | Search arXiv papers. Returns metadata (title, authors, abstract, ID). Supports sorting by relevance/date and date filtering. |
-| `arxiv_download` | Batch download papers by arXiv ID. Prefers .tex source files (PDF fallback). |
-| `openalex_search` | Search cross-disciplinary academic papers via OpenAlex API. Returns DOI, authors, citation count, OA status. |
-| `openreview_lookup` | Lookup OpenReview evidence by title/ID/forum. Returns decision, review rating/confidence aggregates, and review summaries. |
-| `unpaywall_download` | Download open access PDFs by DOI via Unpaywall API. Non-OA papers are silently skipped. |
-| `github_search` | Search GitHub repositories. Returns repo name, description, stars, URL. Supports language filtering and sorting. |
-| `paper_browser` | Paginated browsing of large paper files (.tex/.md) to avoid context overflow. |
-| `scientify_cron_job` | Manage scheduled Scientify jobs (`upsert`/`list`/`remove`). |
-| `scientify_literature_state` | Persistent incremental state for subscriptions: dedupe, record, feedback, and status inspection. |
-
-</details>
-
-<details>
-<summary><b>Commands (direct, no LLM)</b></summary>
-
-| Command | Description |
-|---------|-------------|
-| `/research-status` | Show workspace status and active project |
-| `/papers` | List downloaded papers with metadata |
-| `/ideas` | List generated ideas |
-| `/projects` | List all projects |
-| `/project-delete <id>` | Delete a project |
-| `/research-subscribe ...` | Create/update scheduled Scientify jobs |
-| `/research-subscriptions` | Show your scheduled Scientify jobs |
-| `/research-unsubscribe [job-id]` | Remove your scheduled Scientify jobs |
-
-</details>
-
----
-
-## Known Limitations
-
-- **Sub-agent timeout**: Each sub-agent has a 30-minute timeout. Complex literature surveys may need longer.
-- **GPU/Sandbox**: Code execution runs on host by default. OpenClaw sandbox does not support GPU passthrough yet.
-- **Model dependency**: Research quality depends heavily on the LLM model used. Claude Opus 4.5+ or GPT-5+ recommended.
-
----
-
-## Development
-
-```bash
-git clone https://github.com/tsingyuai/scientify.git
-cd scientify
-pnpm install
-pnpm build          # Build TypeScript
-pnpm dev            # Watch mode
-
-# Link to OpenClaw for testing
-openclaw plugins install -l ./
-```
-
-See [CLAUDE.md](./CLAUDE.md) for version update SOP and contribution guide.
-
----
-
-## Beta Sign-Up
-
-Scientify is currently in closed beta, open to individuals and teams with real research needs.
-
-After signing up, we will provide:
-
-1. Detailed onboarding guidance to get you started quickly
-2. An assessment of your research domain and the feasibility of end-to-end AI-driven research
-3. Personalized recommendations based on your research workflow
-4. Rapid development of new features tailored to your needs
-
-<p align="center">
-  <a href="https://tsingyuai.feishu.cn/share/base/form/shrcne78pTl0NJ9gQqVPDvWm7Wb">
-    <img src="docs/assets/showcase/entry.png" width="200" alt="Scan to sign up for beta">
-  </a>
-  <br>
-  <sub><a href="https://tsingyuai.feishu.cn/share/base/form/shrcne78pTl0NJ9gQqVPDvWm7Wb">Sign Up for Beta</a></sub>
-</p>
-
----
-
-## License
-
-MIT
-
-## Author
-
-tsingyuai
+Scientify runs research tasks continuously on an isolated cloud computer, keeping papers, code, data, and experimental results in one workspace. Tasks continue after you close your computer. Return from your phone or another device to check progress, add materials, and continue your research.
