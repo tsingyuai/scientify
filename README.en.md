@@ -31,15 +31,13 @@ Scientify autonomously completed the literature survey, hypothesis generation, c
   <sub>KV2 performance compared with existing methods</sub>
 </p>
 
-### Case Study 2: Discovering Three Black-Hole Transition Boundaries and Deriving and Testing Their Conditions
+### Case Study 2: Revealing Three Black-Hole Transition Boundaries and Building a Predictive Theory
 
 Scientify independently performed the theoretical derivations, numerical analysis, and manuscript preparation for [Equilibrium Gibbs Bifurcations of Bardeen-AdS Black Holes at Fixed Pressure](https://arxiv.org/abs/2606.00099v1).
 
-**Research question**: The paper studies a black hole with a smooth central region. As the scale of that region increases, can small and large black holes still coexist stably at the same temperature? Under what conditions does that coexistence disappear?
-
-- **Finding three transitions in the calculations**: Scientify calculated black-hole temperature and free energy, which compares the stability of competing states, at different central-region scales. It found that the free-energy curve changes from a swallow-tail to an 8-shape, then a c-shape, and finally a single branch, and located all three changes.
-- **Building a model that predicts transition conditions**: Scientify derived how the central-region scale at each transition decreases as thermodynamic pressure rises: quadrupling the pressure halves that scale. It also obtained the exact condition at which the temperature curve becomes single-branched, allowing this boundary to be calculated directly at a given pressure.
-- **Checking predictions and stable coexistence**: Scientify checked the transition boundaries numerically at three pressures, then tested whether small and large black holes were individually stable and had equal free energy. Stable coexistence persists after the swallow-tail becomes an 8-shape; it is absent in the c-shaped example examined.
+- **The theoretical discovery**: Under the paper's Bardeen-AdS thermodynamic convention, Scientify organized previously reported complex free-energy curves into a sequence with three distinct boundaries. As the smooth central region grows, a swallow-tail becomes an 8-shape, then a c-shape, and finally a single branch. Crucially, **small and large black holes can still coexist stably after the first curve deformation**. All three boundaries share a pressure-scaling relation, with an exact analytical solution for the final boundary.
+- **The evidence in the data**: Scientify compared temperature and free-energy calculations at three pressures, tracking turning points and intersections. Combining pressure and central-region scale in the same way made each boundary collapse to a fixed value across pressures, exposing a common structure. Equation-based derivation explained this collapse; heat-capacity tests and free-energy comparisons verified stable coexistence after the first deformation.
+- **Why the theory matters**: It advances earlier descriptions of curve shapes into **a framework for calculating transition boundaries and determining stable coexistence**. Researchers can infer boundaries at other pressures and assess curve shape separately from stable physical states, quantitatively connecting a smoother black-hole center to its thermodynamic behavior.
 
 ## 2. Leading Agent Performance: Related Paper Accepted at ICML 2026
 
